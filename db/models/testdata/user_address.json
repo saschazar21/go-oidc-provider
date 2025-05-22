@@ -1,0 +1,28 @@
+{
+  "sub": "0fdf70e5-0adf-45d1-b2ec-998881807ac9",
+  "name": "Alexandra Müller",
+  "given_name": "Alexandra",
+  "family_name": "Müller",
+  "middle_name": "Eva",
+  "nickname": "Alex",
+  "preferred_username": "alexmueller",
+  "profile": "https://example.com/users/alexmueller",
+  "picture": "https://example.com/users/alexmueller/photo.jpg",
+  "website": "https://alexmueller.dev",
+  "gender": "female",
+  "birthdate": "1990-04-15",
+  "zoneinfo": "Europe/Berlin",
+  "locale": "de-DE",
+  "email": "alex.mueller@example.com",
+  "email_verified": true,
+  "phone_number": "+4915112345678",
+  "phone_number_verified": false,
+  "address": {
+    "formatted": "Friedrichstraße 123, 10117 Berlin, Germany",
+    "street_address": "Friedrichstraße 123",
+    "locality": "Berlin",
+    "region": "Berlin",
+    "postal_code": "10117",
+    "country": "DE"
+  }
+}

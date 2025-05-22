@@ -1,0 +1,13 @@
+{
+  "sub": "0fdf70e5-0adf-45d1-b2ec-998881807ac9",
+  "name": "Jane A Doe",
+  "given_name": "Jane",
+  "family_name": "Doe",
+  "middle_name": "A",
+  "nickname": "Janey",
+  "preferred_username": "janedoe",
+  "email": "janedoe@example.com",
+  "email_verified": true,
+  "locale": "en-US",
+  "picture": "https://example.com/janedoe.jpg"
+}
