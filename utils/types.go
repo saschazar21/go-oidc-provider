@@ -8,11 +8,17 @@ import (
 	"time"
 )
 
+type Marshalable interface {
+	MarshalJSON() ([]byte, error)
+	UnmarshalJSON(data []byte) error
+}
+
 type Validatable interface {
 	Validate() error
 }
 
 type AuthMethod string
+type AuthStatus string
 
 type EncryptedDate struct {
 	time.Time

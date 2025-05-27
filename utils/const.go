@@ -17,6 +17,13 @@ const (
 )
 
 const (
+	APPROVED AuthStatus = "approved"
+	PENDING  AuthStatus = "pending"
+	DENIED   AuthStatus = "denied"
+	REVOKED  AuthStatus = "revoked"
+)
+
+const (
 	AUTHORIZATION_CODE GrantType = "authorization_code"
 	IMPLICIT           GrantType = "implicit"
 	CLIENT_CREDENTIALS GrantType = "client_credentials"

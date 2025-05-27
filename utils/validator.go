@@ -8,6 +8,7 @@ import (
 
 const (
 	AUTH_METHOD   = "auth-method"
+	AUTH_STATUS   = "auth-status"
 	DATE          = "date"
 	GRANT_TYPE    = "grant-type"
 	PKCE_METHOD   = "pkce-method"
@@ -25,6 +26,7 @@ func NewCustomValidator() *validator.Validate {
 	if _customValidator == nil {
 		_customValidator = validator.New()
 		_customValidator.RegisterValidation(AUTH_METHOD, validateAuthMethod)
+		_customValidator.RegisterValidation(AUTH_STATUS, validateAuthStatus)
 		_customValidator.RegisterValidation(DATE, validateDate)
 		_customValidator.RegisterValidation(GRANT_TYPE, validateGrantType)
 		_customValidator.RegisterValidation(PKCE_METHOD, validatePKCEMethod)
@@ -56,6 +58,27 @@ func validateAuthMethod(fl validator.FieldLevel) bool {
 	}
 	for _, validAuthMethod := range validAuthMethods {
 		if authMethod == validAuthMethod {
+			return true
+		}
+	}
+	return false
+}
+
+func validateAuthStatus(fl validator.FieldLevel) bool {
+	authStatus, ok := fl.Field().Interface().(AuthStatus)
+	if !ok {
+		return false
+	}
+
+	validAuthStatuses := []AuthStatus{
+		APPROVED,
+		PENDING,
+		DENIED,
+		REVOKED,
+	}
+
+	for _, validAuthStatus := range validAuthStatuses {
+		if authStatus == validAuthStatus {
 			return true
 		}
 	}

@@ -140,7 +140,7 @@ CREATE TABLE oidc_clients (
     CONSTRAINT chk_client_secret CHECK (
         (is_confidential = TRUE AND client_secret IS NOT NULL)
         OR
-        (is_confidential = FALSE AND client_secret IS NULL)
+        (is_confidential = FALSE AND client_secret IS NULL AND require_pkce = TRUE)
     )
 );
 
@@ -184,7 +184,7 @@ CREATE TABLE oidc_authorizations (
     claims_granted JSONB,
     
     -- PKCE (Proof Key for Code Exchange)
-    code_challenge VARCHAR(255),
+    code_challenge BYTEA,
     code_challenge_method VARCHAR(50),
     
     -- State/nonce
@@ -192,7 +192,7 @@ CREATE TABLE oidc_authorizations (
     nonce VARCHAR(255),
     
     -- Status
-    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (
+    status VARCHAR(50) DEFAULT 'pending' CHECK (
         status IN ('pending', 'approved', 'denied', 'revoked')
     ),
     
