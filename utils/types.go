@@ -12,6 +12,8 @@ type Validatable interface {
 	Validate() error
 }
 
+type AuthMethod string
+
 type EncryptedDate struct {
 	time.Time
 }
@@ -163,6 +165,8 @@ func (e *EpochMillis) UnmarshalJSON(data []byte) (err error) {
 	return
 }
 
+type GrantType string
+
 type HashedString string
 
 func (h HashedString) Value() (driver.Value, error) {
@@ -170,10 +174,8 @@ func (h HashedString) Value() (driver.Value, error) {
 		return nil, nil
 	}
 
-	hashed, err := Hash([]byte(h))
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash string: %w", err)
-	}
+	hashed := Hash([]byte(h))
+
 	return hashed, nil
 }
 
@@ -194,3 +196,9 @@ func (h *HashedString) Scan(value interface{}) error {
 
 	return nil
 }
+
+type PKCEMethod string
+
+type ResponseType string
+
+type Scope string

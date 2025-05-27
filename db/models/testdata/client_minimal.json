@@ -1,0 +1,4 @@
+{
+  "client_name": "Minimal Client",
+  "redirect_uris": ["https://minimal-client.example.com/callback"]
+}

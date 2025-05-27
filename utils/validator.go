@@ -7,11 +7,16 @@ import (
 )
 
 const (
-	DATE         = "date"
-	TIME_GT_NOW  = "time-gt-now"
-	TIME_LT_NOW  = "time-lt-now"
-	TIME_GTE_NOW = "time-gte-now"
-	TIME_LTE_NOW = "time-lte-now"
+	AUTH_METHOD   = "auth-method"
+	DATE          = "date"
+	GRANT_TYPE    = "grant-type"
+	PKCE_METHOD   = "pkce-method"
+	RESPONSE_TYPE = "response-type"
+	SCOPE         = "scope"
+	TIME_GT_NOW   = "time-gt-now"
+	TIME_LT_NOW   = "time-lt-now"
+	TIME_GTE_NOW  = "time-gte-now"
+	TIME_LTE_NOW  = "time-lte-now"
 )
 
 var _customValidator *validator.Validate
@@ -19,7 +24,12 @@ var _customValidator *validator.Validate
 func NewCustomValidator() *validator.Validate {
 	if _customValidator == nil {
 		_customValidator = validator.New()
+		_customValidator.RegisterValidation(AUTH_METHOD, validateAuthMethod)
 		_customValidator.RegisterValidation(DATE, validateDate)
+		_customValidator.RegisterValidation(GRANT_TYPE, validateGrantType)
+		_customValidator.RegisterValidation(PKCE_METHOD, validatePKCEMethod)
+		_customValidator.RegisterValidation(RESPONSE_TYPE, validateResponseType)
+		_customValidator.RegisterValidation(SCOPE, validateScope)
 		_customValidator.RegisterValidation(TIME_GT_NOW, validateTimeGtNow)
 		_customValidator.RegisterValidation(TIME_LT_NOW, validateTimeLtNow)
 		_customValidator.RegisterValidation(TIME_GTE_NOW, validateTimeGteNow)
@@ -27,6 +37,29 @@ func NewCustomValidator() *validator.Validate {
 	}
 
 	return _customValidator
+}
+
+func validateAuthMethod(fl validator.FieldLevel) bool {
+	authMethod, ok := fl.Field().Interface().(AuthMethod)
+	if !ok {
+		return false
+	}
+
+	validAuthMethods := []AuthMethod{
+		CLIENT_SECRET_BASIC,
+		CLIENT_SECRET_POST,
+		CLIENT_SECRET_JWT,
+		PRIVATE_KEY_JWT,
+		TLS_CLIENT_AUTH,
+		SELF_SIGNED_TLS_CLIENT_AUTH,
+		AUTH_METHOD_NONE,
+	}
+	for _, validAuthMethod := range validAuthMethods {
+		if authMethod == validAuthMethod {
+			return true
+		}
+	}
+	return false
 }
 
 func validateDate(fl validator.FieldLevel) bool {
@@ -77,6 +110,101 @@ func validateDate(fl validator.FieldLevel) bool {
 	default:
 		return false
 	}
+}
+
+func validateGrantType(fl validator.FieldLevel) bool {
+	grantType, ok := fl.Field().Interface().(GrantType)
+	if !ok {
+		return false
+	}
+
+	validGrantTypes := []GrantType{
+		AUTHORIZATION_CODE,
+		IMPLICIT,
+		CLIENT_CREDENTIALS,
+		REFRESH_TOKEN,
+		DEVICE_CODE,
+		JWT_BEARER,
+		CIBA,
+	}
+
+	for _, validGrantType := range validGrantTypes {
+		if grantType == validGrantType {
+			return true
+		}
+	}
+	return false
+}
+
+func validateResponseType(fl validator.FieldLevel) bool {
+	responseType, ok := fl.Field().Interface().(ResponseType)
+	if !ok {
+		return false
+	}
+
+	validResponseTypes := []ResponseType{
+		CODE,
+		TOKEN,
+		ID_TOKEN,
+		CODE_TOKEN,
+		CODE_ID_TOKEN,
+		ID_TOKEN_TOKEN,
+		CODE_ID_TOKEN_TOKEN,
+		FORM_POST,
+	}
+
+	for _, validResponseType := range validResponseTypes {
+		if responseType == validResponseType {
+			return true
+		}
+	}
+	return false
+}
+
+func validateScope(fl validator.FieldLevel) bool {
+	scope, ok := fl.Field().Interface().(Scope)
+	if !ok {
+		return false
+	}
+
+	validScopes := []Scope{
+		OPENID,
+		PROFILE,
+		EMAIL,
+		PHONE,
+		ADDRESS,
+		READ,
+		WRITE,
+		UPDATE,
+		DELETE,
+		OFFLINE_ACCESS,
+	}
+
+	for _, validScope := range validScopes {
+		if scope == validScope {
+			return true
+		}
+	}
+	return false
+}
+
+func validatePKCEMethod(fl validator.FieldLevel) bool {
+	pkceMethod, ok := fl.Field().Interface().(PKCEMethod)
+	if !ok {
+		return false
+	}
+
+	validPKCEMethods := []PKCEMethod{
+		S256,
+		PKCE_NONE,
+	}
+
+	for _, validPKCEMethod := range validPKCEMethods {
+		if pkceMethod == validPKCEMethod {
+			return true
+		}
+	}
+	return false
 }
 
 func validateTimeGtNow(fl validator.FieldLevel) bool {

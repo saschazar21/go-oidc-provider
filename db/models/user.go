@@ -91,22 +91,11 @@ func (a *Address) Validate() error {
 }
 
 func (a *Address) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
-	id, err := storeUserDataInDB(ctx, db, a)
+	err := storeUserDataInDB(ctx, db, a)
 
 	if err != nil {
 		return err
 	}
-
-	if id == nil {
-		log.Println("address ID was not returned from database operation.")
-		return errors.JSONAPIError{
-			StatusCode: http.StatusInternalServerError,
-			Title:      "Internal Server Error",
-			Detail:     "failed to store address data in the database",
-		}
-	}
-
-	a.ID = *id
 
 	return nil
 }
@@ -126,9 +115,9 @@ type User struct {
 	Name                  *string                `json:"name" bun:"-"`
 	Nickname              *string                `json:"nickname" validate:"omitempty,alphanum" bun:"nickname"`
 	PreferredUsername     *string                `json:"preferred_username" validate:"omitempty,alphanum" bun:"preferred_username"`
-	Profile               *string                `json:"profile" validate:"omitempty,http_url" bun:"profile"`
-	Picture               *string                `json:"picture" validate:"omitempty,http_url" bun:"picture"`
-	Website               *string                `json:"website" validate:"omitempty,http_url" bun:"website"`
+	Profile               *utils.EncryptedString `json:"profile" validate:"omitempty,http_url" bun:"profile"`
+	Picture               *utils.EncryptedString `json:"picture" validate:"omitempty,http_url" bun:"picture"`
+	Website               *utils.EncryptedString `json:"website" validate:"omitempty,http_url" bun:"website"`
 	Gender                *utils.EncryptedString `json:"gender" validate:"omitempty,alphanumunicode" bun:"gender,type:bytea"`   // encrypt
 	Birthdate             *utils.EncryptedDate   `json:"birthdate" validate:"omitempty,time-lt-now" bun:"birthdate,type:bytea"` // encrypt
 	Zoneinfo              *string                `json:"zoneinfo" validate:"omitempty,timezone" bun:"zoneinfo"`
@@ -145,6 +134,8 @@ type User struct {
 	CreatedAt
 	UpdatedAt
 }
+
+var _ bun.AfterScanRowHook = (*User)(nil)
 
 func (u *User) formatName() {
 	if u == nil {
@@ -167,8 +158,6 @@ func (u *User) formatName() {
 
 	u.Name = &name
 }
-
-var _ bun.AfterScanRowHook = (*User)(nil)
 
 func (u *User) AfterScanRow(ctx context.Context) error {
 	u.formatName()
@@ -222,24 +211,25 @@ func (u *User) Validate() error {
 }
 
 func (u *User) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
+	if u.Email == nil || *u.Email == "" {
+		return errors.JSONAPIError{
+			StatusCode: http.StatusBadRequest,
+			Title:      errors.BAD_REQUEST,
+			Detail:     "E-Mail address must not be empty",
+		}
+	}
+
+	email := *u.Email                            // store e-mail before hashing
 	u.EmailHash = (*utils.HashedString)(u.Email) // for avoiding re-hashing the already hashed e-mail
 
-	id, err := storeUserDataInDB(ctx, db, u)
+	err := storeUserDataInDB(ctx, db, u)
 
 	if err != nil {
 		return err
 	}
 
-	if id == nil {
-		log.Println("user ID was not returned from database operation.")
-		return errors.JSONAPIError{
-			StatusCode: http.StatusInternalServerError,
-			Title:      "Internal Server Error",
-			Detail:     "failed to store user data in the database",
-		}
-	}
-
-	u.ID = *id
+	u.Email = &email // restore e-mail after hashing
+	u.EmailHash = nil
 
 	if u.Address != nil {
 		u.Address.UserID = u.ID
@@ -252,7 +242,7 @@ func (u *User) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 	return nil
 }
 
-func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelWithID) (*uuid.UUID, errors.HTTPError) {
+func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelWithID) errors.HTTPError {
 	var defaultMsg string
 	var t string
 
@@ -263,8 +253,8 @@ func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelW
 		t = "address"
 	default:
 		log.Printf("unknown model type: %T", m)
-		defaultMsg = fmt.Sprintf("storing %s data in the database failed", t)
-		return nil, errors.JSONAPIError{
+		defaultMsg = fmt.Sprintf("Storing %s data in the database failed", t)
+		return errors.JSONAPIError{
 			StatusCode: http.StatusInternalServerError,
 			Title:      errors.INTERNAL_SERVER_ERROR,
 			Detail:     defaultMsg,
@@ -273,14 +263,13 @@ func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelW
 
 	if err := model.Validate(); err != nil {
 		log.Printf("failed to validate %s: %v", t, err)
-		return nil, errors.JSONAPIError{
+		return errors.JSONAPIError{
 			StatusCode: http.StatusBadRequest,
 			Title:      errors.BAD_REQUEST,
 			Detail:     fmt.Sprintf("%s data contains invalid structure, check the request body", t),
 		}
 	}
 
-	var uid uuid.UUID
 	var err error
 	var isExisting bool
 	var result sql.Result
@@ -288,12 +277,13 @@ func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelW
 	if model.GetID() != "" {
 		isExisting, err = db.NewSelect().
 			Model(model).
+			Column(fmt.Sprintf("%s_id", t)).
 			Where(fmt.Sprintf("\"%s\".\"%s_id\" = ?", t, t), model.GetID()).
 			Exists(ctx)
 
 		if err != nil {
 			log.Printf("failed to check if %s exists: %v", t, err)
-			return nil, errors.JSONAPIError{
+			return errors.JSONAPIError{
 				StatusCode: http.StatusInternalServerError,
 				Title:      errors.INTERNAL_SERVER_ERROR,
 				Detail:     defaultMsg,
@@ -306,19 +296,19 @@ func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelW
 			Model(model).
 			Where(fmt.Sprintf("\"%s\".\"%s_id\" = ?", t, t), model.GetID()).
 			ExcludeColumn(fmt.Sprintf("%s_id", t), "created_at", "updated_at").
-			Returning(fmt.Sprintf("%s_id", t)).
-			Exec(ctx, &uid)
+			Returning("*").
+			Exec(ctx, model)
 	} else {
 		result, err = db.NewInsert().
 			Model(model).
 			ExcludeColumn(fmt.Sprintf("%s_id", t), "created_at", "updated_at").
-			Returning(fmt.Sprintf("%s_id", t)).
-			Exec(ctx, &uid)
+			Returning("*").
+			Exec(ctx, model)
 	}
 
 	if err != nil {
 		log.Printf("failed to insert or update %s: %v", t, err)
-		return nil, errors.JSONAPIError{
+		return errors.JSONAPIError{
 			StatusCode: http.StatusInternalServerError,
 			Title:      errors.INTERNAL_SERVER_ERROR,
 			Detail:     defaultMsg,
@@ -327,17 +317,25 @@ func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelW
 
 	if rows, err := result.RowsAffected(); err != nil || rows == 0 {
 		log.Printf("failed to insert or update %s: %v", t, err)
-		return nil, errors.JSONAPIError{
+		return errors.JSONAPIError{
 			StatusCode: http.StatusInternalServerError,
 			Title:      errors.INTERNAL_SERVER_ERROR,
 			Detail:     defaultMsg,
 		}
 	}
 
-	return &uid, nil
+	return nil
 }
 
 func GetUserByID(ctx context.Context, db bun.IDB, id string) (*User, errors.HTTPError) {
+	if id == "" {
+		return nil, errors.JSONAPIError{
+			StatusCode: http.StatusBadRequest,
+			Title:      errors.BAD_REQUEST,
+			Detail:     "User ID must not be empty",
+		}
+	}
+
 	var user User
 
 	err := db.NewSelect().
@@ -359,20 +357,19 @@ func GetUserByID(ctx context.Context, db bun.IDB, id string) (*User, errors.HTTP
 }
 
 func GetUserByEmail(ctx context.Context, db bun.IDB, email string) (*User, errors.HTTPError) {
-	hashed, err := utils.Hash([]byte(email))
-
-	if err != nil {
-		log.Printf("failed to hash email: %v", err)
+	if email == "" {
 		return nil, errors.JSONAPIError{
 			StatusCode: http.StatusBadRequest,
 			Title:      errors.BAD_REQUEST,
-			Detail:     fmt.Sprintf("could not use given e-mail as search parameter: %s", email),
+			Detail:     "E-Mail address must not be empty",
 		}
 	}
 
+	hashed := utils.Hash([]byte(email))
+
 	var user User
 
-	err = db.NewSelect().
+	err := db.NewSelect().
 		Model(&user).
 		Where("\"user\".\"email_hash\" = ?", hashed).
 		Relation("Address").

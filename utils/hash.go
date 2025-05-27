@@ -1,22 +1,11 @@
 package utils
 
 import (
-	"crypto/sha512"
-	"fmt"
+	"github.com/zeebo/blake3"
 )
 
-func Hash(data []byte) ([]byte, error) {
-	// Create a new SHA512 hash
-	h := sha512.New()
+func Hash(data []byte) (hashed [32]byte) {
+	hashed = blake3.Sum256(data)
 
-	// Write data to the hash
-	_, err := h.Write(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write data to hash: %w", err)
-	}
-
-	// Get the final hash result
-	hash := h.Sum(nil)
-
-	return hash, nil
+	return
 }

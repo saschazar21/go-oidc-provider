@@ -13,13 +13,14 @@ CREATE TYPE oidc_grant_type AS ENUM (
 );
 
 CREATE TYPE oidc_response_type AS ENUM (
-    'code',              -- Authorization Code Flow
-    'token',             -- Implicit Flow (not recommended)
-    'id_token',          -- OpenID Connect specific
-    'code token',        -- Hybrid Flow
-    'code id_token',     -- Hybrid Flow
-    'id_token token',    -- Hybrid Flow
+    'code',               -- Authorization Code Flow
+    'token',              -- Implicit Flow (not recommended)
+    'id_token',           -- OpenID Connect specific
+    'code token',         -- Hybrid Flow
+    'code id_token',      -- Hybrid Flow
+    'id_token token',     -- Hybrid Flow
     'code id_token token' -- Hybrid Flow
+    'form_post'           -- OAuth 2.0 Form Post Response Mode
 );
 
 CREATE TYPE oidc_auth_method AS ENUM (
@@ -62,9 +63,9 @@ CREATE TABLE oidc_users (
     middle_name BYTEA,
     nickname VARCHAR(100),
     preferred_username VARCHAR(100),
-    profile VARCHAR(512),
-    picture VARCHAR(512),
-    website VARCHAR(512),
+    profile BYTEA,
+    picture BYTEA,
+    website BYTEA,
     gender BYTEA,
     birthdate BYTEA,
     zoneinfo VARCHAR(50),
@@ -100,17 +101,17 @@ CREATE TABLE oidc_addresses (
 );
 
 CREATE TABLE oidc_clients (
-    client_id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id VARCHAR(255) PRIMARY KEY,
     client_secret BYTEA, -- Hashed if confidential client
     client_name VARCHAR(255) NOT NULL,
     client_description TEXT,
     client_uri VARCHAR(512),
     logo_uri VARCHAR(512),
-    owner UUID NOT NULL REFERENCES oidc_users(user_id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL REFERENCES oidc_users(user_id) ON DELETE CASCADE,
     
     -- Auth types
-    grant_types oidc_grant_type[] NOT NULL DEFAULT ARRAY['authorization_code'::oidc_grant_type, 'refresh_token'::oidc_grant_type],
-    response_types oidc_response_type[] NOT NULL DEFAULT ARRAY['code'::oidc_response_type],
+    grant_types oidc_grant_type[] DEFAULT ARRAY['authorization_code'::oidc_grant_type, 'refresh_token'::oidc_grant_type],
+    response_types oidc_response_type[] DEFAULT ARRAY['code'::oidc_response_type],
     token_endpoint_auth_method oidc_auth_method DEFAULT 'client_secret_basic'::oidc_auth_method,
     
     -- Redirect URIs
@@ -125,7 +126,7 @@ CREATE TABLE oidc_clients (
     -- Token configuration
     access_token_lifetime INT DEFAULT 3600, -- 1 hour
     refresh_token_lifetime INT DEFAULT 86400, -- 24 hours
-    id_token_lifetime INT DEFAULT 3600,
+    id_token_lifetime INT DEFAULT 300, -- 5 minutes
     
     -- Metadata
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
