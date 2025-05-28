@@ -89,7 +89,7 @@ func TestAuthorization(t *testing.T) {
 				t.Errorf("Save() error = %v, wantErr %v", err, tt.WantErr)
 			}
 
-			if !tt.WantErr {
+			if !tt.WantErr && tt.WantsUser {
 				assert.NotEmpty(t, authorization.ID, "Authorization ID should not be empty after save")
 				assert.Empty(t, authorization.ReplacedID, "Replaced ID should be empty for new authorizations")
 

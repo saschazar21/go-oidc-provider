@@ -31,8 +31,8 @@ type Authorization struct {
 	State *string `json:"state,omitempty" bun:"state"` // State parameter for the authorization request, if applicable
 	Nonce *string `json:"nonce,omitempty" bun:"nonce"` // Nonce parameter for the authorization request, if applicable
 
-	IsActive bool             `json:"is_active" bun:"is_active"`
-	Status   utils.AuthStatus `json:"status" validate:"omitempty,auth-status" bun:"status"` // Status of the authorization (e.g., approved, pending, denied, revoked)
+	IsActive bool              `json:"is_active" bun:"is_active"`
+	Status   *utils.AuthStatus `json:"status" validate:"omitempty,auth-status" bun:"status"` // Status of the authorization (e.g., approved, pending, denied, revoked)
 
 	ClientID string  `json:"-" validate:"required" bun:"client_id,notnull"`     // ID of the client associated with the authorization
 	Client   *Client `json:"client" bun:"rel:has-one,join:client_id=client_id"` // Client associated with the authorization
@@ -52,7 +52,7 @@ type Authorization struct {
 var _ bun.BeforeInsertHook = (*Authorization)(nil)
 
 func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db bun.IDB) errors.OIDCError {
-	if a.UserID == uuid.Nil {
+	if a.UserID == uuid.Nil || !a.IsActive {
 		return nil
 	}
 
