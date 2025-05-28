@@ -21,22 +21,21 @@ const (
 type Client struct {
 	bun.BaseModel `bun:"table:oidc_clients"`
 
-	ID            string               `json:"client_id" bun:"client_id,pk"`
-	Name          string               `json:"client_name" validate:"required" bun:"client_name,notnull"`                                                                    // Name of the client, used for display purposes
-	Secret        *utils.HashedString  `json:"-" bun:"client_secret,type:bytea"`                                                                                             // Hashed
-	Description   *string              `json:"client_description,omitempty" bun:"client_description,type:text"`                                                              // Optional description of the client
-	URI           *string              `json:"client_uri,omitempty" validate:"omitempty,uri" bun:"client_uri"`                                                               // Optional URI for the client
-	Logo          *string              `json:"logo_uri,omitempty" validate:"omitempty,uri" bun:"logo_uri"`                                                                   // Optional logo URI for the client
-	GrantTypes    []utils.GrantType    `json:"grant_types,omitempty" validate:"omitempty,dive,grant-type" bun:"grant_types,type:oidc_grant_type[],notnull"`                  // List of grant types supported by the client
-	ResponseTypes []utils.ResponseType `json:"response_types,omitempty" validate:"omitempty,dive,response-type" bun:"response_types,type:oidc_response_type[],notnull"`      // List of response types supported by the client
-	AuthMethod    *utils.AuthMethod    `json:"token_endpoint_auth_method,omitempty" validate:"omitempty,auth-method" bun:"token_endpoint_auth_method,type:oidc_auth_method"` // Authentication method for the token endpoint
+	ID            string                `json:"client_id" bun:"client_id,pk"`
+	Name          string                `json:"client_name" validate:"required" bun:"client_name,notnull"`                                                                    // Name of the client, used for display purposes
+	Secret        *utils.HashedString   `json:"-" bun:"client_secret,type:bytea"`                                                                                             // Hashed
+	Description   *string               `json:"client_description,omitempty" bun:"client_description,type:text"`                                                              // Optional description of the client
+	URI           *string               `json:"client_uri,omitempty" validate:"omitempty,uri" bun:"client_uri"`                                                               // Optional URI for the client
+	Logo          *string               `json:"logo_uri,omitempty" validate:"omitempty,uri" bun:"logo_uri"`                                                                   // Optional logo URI for the client
+	GrantTypes    *[]utils.GrantType    `json:"grant_types,omitempty" validate:"omitempty,dive,grant-type" bun:"grant_types,type:oidc_grant_type[],notnull"`                  // List of grant types supported by the client
+	ResponseTypes *[]utils.ResponseType `json:"response_types,omitempty" validate:"omitempty,dive,response-type" bun:"response_types,type:oidc_response_type[],notnull"`      // List of response types supported by the client
+	AuthMethod    *utils.AuthMethod     `json:"token_endpoint_auth_method,omitempty" validate:"omitempty,auth-method" bun:"token_endpoint_auth_method,type:oidc_auth_method"` // Authentication method for the token endpoint
 
 	RedirectURIs           []string `json:"redirect_uris" validate:"required,dive,uri" bun:"redirect_uris,type:text[]"`                                    // List of redirect URIs for the client
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris,omitempty" validate:"omitempty,dive,uri" bun:"post_logout_redirect_uris,type:text[]"` // List of post logout redirect URIs for the client
 
-	IsAuthTimeRequired bool              `json:"require_auth_time,omitempty" bun:"require_auth_time"`                      // Whether the client requires auth time
-	IsPKCERequired     bool              `json:"require_pkce,omitempty" bun:"require_pkce"`                                // Whether the client requires PKCE
-	PKCEMethod         *utils.PKCEMethod `json:"pkce_method,omitempty" validate:"omitempty,pkce-method" bun:"pkce_method"` // PKCE method used by the client
+	IsAuthTimeRequired bool `json:"require_auth_time,omitempty" bun:"require_auth_time"` // Whether the client requires auth time
+	IsPKCERequired     bool `json:"require_pkce,omitempty" bun:"require_pkce"`           // Whether the client requires PKCE
 
 	AccessTokenLifetime  int64 `json:"access_token_lifetime" validate:"omitempty,gt=0" bun:"access_token_lifetime,default:3600"`              // Lifetime of access tokens in seconds
 	RefreshTokenLifetime int64 `json:"refresh_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"refresh_token_lifetime,default:86400"` // Lifetime of refresh tokens in seconds
@@ -209,12 +208,6 @@ func (c *Client) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 	}
 
 	return c.save(ctx, db, "client_secret")
-}
-
-func (c *Client) Validate() (err error) {
-	err = utils.NewCustomValidator().Struct(c)
-
-	return
 }
 
 func GetClientByID(ctx context.Context, db bun.IDB, id string) (*Client, errors.HTTPError) {

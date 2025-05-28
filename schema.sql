@@ -121,7 +121,6 @@ CREATE TABLE oidc_clients (
     -- Security
     require_auth_time BOOLEAN DEFAULT FALSE,
     require_pkce BOOLEAN DEFAULT TRUE,
-    pkce_method VARCHAR(50) DEFAULT 'S256',
     
     -- Token configuration
     access_token_lifetime INT DEFAULT 3600, -- 1 hour
@@ -175,8 +174,10 @@ CREATE INDEX idx_oidc_sessions_expires ON oidc_sessions(expires_at);
 
 CREATE TABLE oidc_authorizations (
     authorization_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    client_id VARCHAR(255) NOT NULL REFERENCES oidc_clients(client_id),
-    user_id UUID NOT NULL REFERENCES oidc_users(user_id),
+    client_id VARCHAR(255) NOT NULL REFERENCES oidc_clients(client_id) ON DELETE CASCADE,
+    user_id UUID REFERENCES oidc_users(user_id) ON DELETE CASCADE,
+    redirect_uri TEXT NOT NULL,
+    response_type oidc_response_type NOT NULL,
     
     -- Authorization metadata
     scope oidc_standard_scope[] NOT NULL,
@@ -184,17 +185,21 @@ CREATE TABLE oidc_authorizations (
     claims_granted JSONB,
     
     -- PKCE (Proof Key for Code Exchange)
-    code_challenge BYTEA,
-    code_challenge_method VARCHAR(50),
+    code_challenge TEXT,
+    code_challenge_method VARCHAR(10) DEFAULT 'S256' CHECK (
+        code_challenge_method IN ('plain', 'S256')
+    ),
     
     -- State/nonce
     state VARCHAR(255),
     nonce VARCHAR(255),
     
     -- Status
+    is_active BOOLEAN DEFAULT FALSE,
     status VARCHAR(50) DEFAULT 'pending' CHECK (
         status IN ('pending', 'approved', 'denied', 'revoked')
     ),
+    replaced_id UUID REFERENCES oidc_authorizations(authorization_id),
     
     -- Timestamps
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -202,8 +207,12 @@ CREATE TABLE oidc_authorizations (
     expires_at TIMESTAMPTZ NOT NULL,
     revoked_at TIMESTAMPTZ,
 
-    -- Unique constraint
-    UNIQUE(client_id, user_id)
+    -- Empty user_id constraint
+    CONSTRAINT chk_empty_user_id CHECK (
+        (user_id IS NULL AND status = 'pending' AND is_active = FALSE)
+        OR
+        (user_id IS NOT NULL AND is_active = TRUE AND status IN ('approved', 'denied', 'revoked'))
+    )
 );
 
 -- Indexes for the authorizations table

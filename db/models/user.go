@@ -83,13 +83,6 @@ func (a *Address) String() string {
 	return *a.Formatted
 }
 
-func (a *Address) Validate() error {
-	if err := utils.NewCustomValidator().Struct(a); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (a *Address) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 	err := storeUserDataInDB(ctx, db, a)
 
@@ -194,20 +187,6 @@ func (u *User) String() string {
 	stringified = fmt.Sprintf("[%s]: %s (%s)", u.ID.String(), stringified, string(*u.Email))
 
 	return stringified
-}
-
-func (u *User) Validate() error {
-	if err := utils.NewCustomValidator().Struct(u); err != nil {
-		return err
-	}
-
-	if u.Address != nil {
-		if err := u.Address.Validate(); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (u *User) Save(ctx context.Context, db bun.IDB) errors.HTTPError {

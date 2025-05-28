@@ -1,0 +1,16 @@
+{
+  "redirect_uri": "https://minimal-client.example.com/callback",
+  "response_type": "code",
+  "scope": ["openid", "profile", "email"],
+  "claims_requested": {
+    "userinfo": {
+      "email": null,
+      "email_verified": null,
+      "name": null
+    }
+  },
+  "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+  "code_challenge_method": "S256",
+  "state": "af0ifjsldkj",
+  "nonce": "n-0S6_WzA2Mj"
+}
