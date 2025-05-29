@@ -98,7 +98,7 @@ type User struct {
 
 	ID                    uuid.UUID              `json:"sub" bun:"user_id,type:uuid,pk,default:gen_random_uuid()"`
 	Email                 *utils.EncryptedString `json:"email" validate:"required,email" bun:"email,type:bytea,unique,notnull"` // encrypt
-	EmailHash             *utils.HashedString    `json:"-" validate:"required" bun:"email_hash,type:bytea,unique,notnull"`      // hashed base64-url-encoded
+	EmailHash             *utils.HashedString    `json:"-" bun:"email_hash,type:bytea,unique,notnull"`                          // hashed base64-url-encoded
 	IsEmailVerified       bool                   `json:"email_verified" bun:"email_verified,notnull"`
 	PhoneNumber           *string                `json:"phone_number" validate:"omitempty,e164" bun:"phone_number,type:bytea,unique"` // encrypt
 	IsPhoneNumberVerified bool                   `json:"phone_number_verified" bun:"phone_number_verified"`

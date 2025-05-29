@@ -62,7 +62,9 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 	err := db.NewSelect().
 		Model((*Authorization)(nil)).
 		Where("\"authorization\".\"is_active\" = ? AND \"authorization\".\"user_id\" = ? AND \"authorization\".\"client_id\" = ?", true, a.UserID, a.ClientID).
-		Order("\"authorization\".\"created_at\" DESC").
+		Relation("Client").
+		Relation("User").
+		Order("created_at DESC").
 		Scan(ctx, &replacedAuthorizations)
 
 	if err != nil {
@@ -102,13 +104,17 @@ func (a *Authorization) BeforeInsert(ctx context.Context, query *bun.InsertQuery
 	}
 
 	if a.ExpiresAt.ExpiresAt.IsZero() {
-		a.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Minute * 10) // Default expiration time of 30 days
+		a.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Minute * 10) // Default expiration time of 10 minutes (initial)
 	}
 
 	return nil
 }
 
 func (a *Authorization) Save(ctx context.Context, db bun.IDB) errors.OIDCError {
+	if a.ExpiresAt.ExpiresAt.IsZero() {
+		a.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Minute * 10) // Default expiration time of 10 minutes (initial)
+	}
+
 	if err := a.Validate(); err != nil {
 		return err
 	}
@@ -148,7 +154,7 @@ func (a *Authorization) Save(ctx context.Context, db bun.IDB) errors.OIDCError {
 		result, err = db.NewUpdate().
 			Model(a).
 			WherePK().
-			ExcludeColumn("created_at", "expires_at").
+			ExcludeColumn("created_at").
 			Returning("*").
 			Exec(ctx, a)
 	} else {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/test"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,13 @@ func TestAuthorization(t *testing.T) {
 			TestFile:    "authorization_pending.json",
 			WantsClient: true,
 			WantsUser:   false,
+			WantErr:     false,
+		},
+		{
+			Name:        "Approved Authorization",
+			TestFile:    "authorization_approved.json",
+			WantsClient: true,
+			WantsUser:   true,
 			WantErr:     false,
 		},
 	}
@@ -94,6 +102,7 @@ func TestAuthorization(t *testing.T) {
 				assert.Empty(t, authorization.ReplacedID, "Replaced ID should be empty for new authorizations")
 
 				newAuthorization := authorization
+				newAuthorization.ID = uuid.UUID{}
 
 				if tt.WantsUser {
 					newAuthorization.UserID = user.ID

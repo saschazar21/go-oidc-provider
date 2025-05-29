@@ -7,7 +7,7 @@ type CreatedAt struct {
 }
 
 type ExpiresAt struct {
-	ExpiresAt time.Time `json:"expires_at" validate:"omitempty,time-gt-now" bun:"expires_at,notnull"`
+	ExpiresAt time.Time `json:"expires_at" validate:"omitempty,time-gt-now" bun:"expires_at,notnull,nullzero"`
 }
 
 type UpdatedAt struct {

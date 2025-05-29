@@ -211,7 +211,7 @@ CREATE TABLE oidc_authorizations (
     CONSTRAINT chk_empty_user_id CHECK (
         (user_id IS NULL AND status = 'pending' AND is_active = FALSE)
         OR
-        (user_id IS NOT NULL AND is_active = TRUE AND status IN ('approved', 'denied', 'revoked'))
+        (user_id IS NOT NULL AND status IN ('approved', 'denied', 'revoked'))
     )
 );
 
