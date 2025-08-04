@@ -197,7 +197,7 @@ func (a *Authorization) Save(ctx context.Context, db bun.IDB) errors.OIDCError {
 }
 
 func GetAuthorizationByID(ctx context.Context, db bun.IDB, id string) (*Authorization, errors.HTTPError) {
-	if id == "" {
+	if id == "" || id == uuid.Nil.String() {
 		return nil, errors.HTTPErrorResponse{
 			StatusCode:  http.StatusBadRequest,
 			Message:     errors.BAD_REQUEST,
