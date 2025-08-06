@@ -152,7 +152,7 @@ func TestAuthorization(t *testing.T) {
 	}
 }
 
-func TestGetAuthorizationByIDError(t *testing.T) {
+func TestGetAuthorizationByID(t *testing.T) {
 	t.Setenv(test.ROOT_DIR_ENV, "../..")
 
 	ctx := context.Background()
@@ -172,6 +172,7 @@ func TestGetAuthorizationByIDError(t *testing.T) {
 	existingAuth.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Minute * 10)
 
 	type testStruct struct {
+		name          string
 		authorization *Authorization
 		id            string
 		wantErr       bool
@@ -179,21 +180,25 @@ func TestGetAuthorizationByIDError(t *testing.T) {
 
 	tests := []testStruct{
 		{
+			name:          "Empty ID",
 			authorization: nil,
 			id:            "",
 			wantErr:       true,
 		},
 		{
+			name:          "Nil UUID ID",
 			authorization: nil,
 			id:            uuid.Nil.String(),
 			wantErr:       true,
 		},
 		{
+			name:          "Non-existing ID",
 			authorization: nil,
 			id:            "bb792595-be1f-4e1e-9856-c70c2f8e9d4c",
 			wantErr:       true,
 		},
 		{
+			name:          "Existing ID",
 			authorization: &existingAuth,
 			id:            existingAuth.ID.String(),
 			wantErr:       false,
@@ -201,44 +206,171 @@ func TestGetAuthorizationByIDError(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		conn := db.Connect(ctx)
+		t.Run(tt.name, func(t *testing.T) {
+			conn := db.Connect(ctx)
 
-		t.Cleanup(func() {
-			if err := conn.Close(); err != nil {
-				t.Errorf("Failed to close database connection: %v", err)
+			t.Cleanup(func() {
+				if err := conn.Close(); err != nil {
+					t.Errorf("Failed to close database connection: %v", err)
+				}
+
+				pgContainer.Restore(ctx, postgres.WithSnapshotName(test.SNAPSHOT_INIT))
+			})
+
+			if tt.authorization != nil {
+				var user User
+				if err := loadFixture("user.json", &user); err != nil {
+					t.Fatalf("Failed to load fixture: %v", err)
+				}
+
+				if err := user.Save(ctx, conn); err != nil {
+					t.Fatalf("Failed to save user: %v", err)
+				}
+
+				var client Client
+				if err := loadFixture("client_minimal.json", &client); err != nil {
+					t.Fatalf("Failed to load fixture: %v", err)
+				}
+
+				client.OwnerID = user.ID
+				if err := client.Save(ctx, conn); err != nil {
+					t.Fatalf("Failed to save client: %v", err)
+				}
+
+				tt.authorization.ClientID = client.ID
+				if _, err := conn.NewInsert().Model(tt.authorization).Exec(ctx, tt.authorization); err != nil {
+					t.Errorf("Save() error = %v", err)
+				}
 			}
 
-			// pgContainer.Restore(ctx, postgres.WithSnapshotName(test.SNAPSHOT_INIT))
+			if _, err := GetAuthorizationByID(ctx, conn, tt.id); (err != nil) != tt.wantErr {
+				t.Errorf("GetAuthorizationByID() error = %v", err)
+			}
 		})
+	}
+}
 
-		if tt.authorization != nil {
-			var user User
-			if err := loadFixture("user.json", &user); err != nil {
-				t.Fatalf("Failed to load fixture: %v", err)
+func TestGetAuthorizationByClientAndUser(t *testing.T) {
+	t.Setenv(test.ROOT_DIR_ENV, "../..")
+
+	ctx := context.Background()
+
+	pgContainer, err := test.CreateContainer(t, ctx)
+	if err != nil {
+		t.Fatalf("Failed to create PostgreSQL container: %v", err)
+	}
+	defer pgContainer.Terminate(ctx)
+
+	var existingAuth Authorization
+	if err := loadFixture("authorization_approved.json", &existingAuth); err != nil {
+		t.Errorf("loadFixture() error = %v", err)
+	}
+
+	existingAuth.ID = uuid.New()
+	existingAuth.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Minute * 10)
+
+	inactiveAuth := existingAuth
+	inactiveAuth.IsActive = false
+
+	type testStruct struct {
+		name          string
+		authorization *Authorization
+		client        string
+		user          uuid.UUID
+		wantErr       bool
+	}
+
+	tests := []testStruct{
+		{
+			name:          "Empty client and user",
+			authorization: nil,
+			client:        "",
+			user:          uuid.Nil,
+			wantErr:       true,
+		},
+		{
+			name:          "Empty client and inexisting user",
+			authorization: nil,
+			client:        "",
+			user:          uuid.New(),
+			wantErr:       true,
+		},
+		{
+			name:          "Inexisting client and empty user",
+			authorization: nil,
+			client:        "bb792595-be1f-4e1e-9856-c70c2f8e9d4c",
+			user:          uuid.Nil,
+			wantErr:       true,
+		},
+		{
+			name:          "Inexisting client and inexisting user",
+			authorization: nil,
+			client:        "bb792595-be1f-4e1e-9856-c70c2f8e9d4c",
+			user:          uuid.New(),
+			wantErr:       true,
+		},
+		{
+			name:          "Inactive authorization",
+			authorization: &inactiveAuth,
+			client:        "",
+			user:          uuid.Nil,
+			wantErr:       true,
+		},
+		{
+			name:          "Existing authorization",
+			authorization: &existingAuth,
+			client:        "",       // will be set once client is saved
+			user:          uuid.Nil, // will be set once user is saved
+			wantErr:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn := db.Connect(ctx)
+
+			t.Cleanup(func() {
+				if err := conn.Close(); err != nil {
+					t.Errorf("Failed to close database connection: %v", err)
+				}
+
+				pgContainer.Restore(ctx, postgres.WithSnapshotName(test.SNAPSHOT_INIT))
+			})
+
+			if tt.authorization != nil {
+				var user User
+				if err := loadFixture("user.json", &user); err != nil {
+					t.Fatalf("Failed to load fixture: %v", err)
+				}
+
+				if err := user.Save(ctx, conn); err != nil {
+					t.Fatalf("Failed to save user: %v", err)
+				}
+
+				var client Client
+				if err := loadFixture("client_minimal.json", &client); err != nil {
+					t.Fatalf("Failed to load fixture: %v", err)
+				}
+
+				client.OwnerID = user.ID
+				if err := client.Save(ctx, conn); err != nil {
+					t.Fatalf("Failed to save client: %v", err)
+				}
+
+				tt.authorization.ClientID = client.ID
+				tt.authorization.UserID = user.ID
+
+				tt.client = client.ID
+				tt.user = user.ID
+
+				if _, err := conn.NewInsert().Model(tt.authorization).Exec(ctx, tt.authorization); err != nil {
+					t.Errorf("Save() error = %v", err)
+				}
 			}
 
-			if err := user.Save(ctx, conn); err != nil {
-				t.Fatalf("Failed to save user: %v", err)
+			if _, err := GetAuthorizationByClientAndUser(ctx, conn, tt.client, tt.user); (err != nil) != tt.wantErr {
+				t.Errorf("GetAuthorizationByClientAndUser() error = %v", err)
 			}
-
-			var client Client
-			if err := loadFixture("client_minimal.json", &client); err != nil {
-				t.Fatalf("Failed to load fixture: %v", err)
-			}
-
-			client.OwnerID = user.ID
-			if err := client.Save(ctx, conn); err != nil {
-				t.Fatalf("Failed to save client: %v", err)
-			}
-
-			tt.authorization.ClientID = client.ID
-			if _, err := conn.NewInsert().Model(tt.authorization).Exec(ctx, tt.authorization); err != nil {
-				t.Errorf("Save() error = %v", err)
-			}
-		}
-
-		if _, err := GetAuthorizationByID(ctx, conn, tt.id); (err != nil) != tt.wantErr {
-			t.Errorf("GetAuthorizationByID() error = %v", err)
-		}
+		})
 	}
 }
