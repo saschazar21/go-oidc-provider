@@ -83,6 +83,26 @@ func (a *Authorization) Validate() errors.OIDCError {
 		}
 	}
 
+	if a.CodeChallenge == nil && a.Client.IsPKCERequired {
+		description := "PKCE is required for this client, but no code_challenge provided"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			RedirectURI:      a.RedirectURI,
+			ErrorDescription: &description,
+		}
+	}
+
+	if a.ClientSecret != nil && !a.Client.Secret.Compare([]byte(*a.ClientSecret)) {
+		msg := "Client secret does not match the stored secret."
+		log.Println(msg)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_CLIENT,
+			ErrorDescription: &msg,
+			RedirectURI:      a.RedirectURI,
+		}
+	}
+
 	isFound := false
 	for _, redirectUri := range a.Client.RedirectURIs {
 		if a.RedirectURI == redirectUri {
@@ -123,6 +143,33 @@ func (a *Authorization) Validate() errors.OIDCError {
 		return errors.OIDCErrorResponse{
 			ErrorCode:   errors.SERVER_ERROR,
 			RedirectURI: a.RedirectURI,
+		}
+	}
+
+	return nil
+}
+
+// Pre-validate the authorization request.
+// This ensures that the client is properly authenticated,
+// as well as a few other properties, which are not stored in the database.
+func (a *Authorization) ValidateRequest() errors.OIDCError {
+	if a.CodeChallenge == nil && a.ClientSecret == nil {
+		msg := "Either code_challenge or client_secret must be provided."
+		log.Println(msg)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &msg,
+			RedirectURI:      a.RedirectURI,
+		}
+	}
+
+	if a.CodeChallenge != nil && a.ClientSecret != nil {
+		msg := "Providing both code_challenge and client_secret is invalid."
+		log.Println(msg)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &msg,
+			RedirectURI:      a.RedirectURI,
 		}
 	}
 

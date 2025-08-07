@@ -5,6 +5,7 @@ const (
 	ACCOUNT_SELECTION_REQUIRED OIDCErrorCode = "account_selection_required"
 	CONSENT_REQUIRED           OIDCErrorCode = "consent_required"
 	INTERACTION_REQUIRED       OIDCErrorCode = "interaction_required"
+	INVALID_CLIENT             OIDCErrorCode = "invalid_client"
 	INVALID_REQUEST            OIDCErrorCode = "invalid_request"
 	INVALID_REQUEST_OBJECT     OIDCErrorCode = "invalid_request_object"
 	INVALID_REQUEST_URI        OIDCErrorCode = "invalid_request_uri"

@@ -203,6 +203,17 @@ func (h *HashedString) Scan(value interface{}) error {
 	return nil
 }
 
+func (h *HashedString) Compare(plain []byte) bool {
+	if len(*h) == 0 {
+		return false
+	}
+
+	hashed := Hash(plain)
+	str := base64.RawURLEncoding.EncodeToString(hashed[:])
+
+	return string(*h) == str
+}
+
 type PKCEMethod string
 
 type ResponseType string

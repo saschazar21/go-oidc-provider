@@ -19,29 +19,34 @@ type Authorization struct {
 
 	ID uuid.UUID `json:"-" bun:"authorization_id,pk,type:uuid,default:gen_random_uuid()"` // Unique identifier for the authorization
 
-	Scope           []utils.Scope           `json:"scope" validate:"required,dive,scope" bun:"scope,type:oidc_standard_scope[],notnull"` // List of scopes associated with the authorization
-	ClaimsRequested *map[string]interface{} `json:"claims_requested,omitempty" bun:"claims_requested,type:jsonb"`                        // Optional claims requested by the client, stored as JSON
-	ClaimsGranted   *map[string]interface{} `json:"claims_granted,omitempty" bun:"claims_granted,type:jsonb"`                            // Optional claims granted by the authorization server, stored as JSON
-	RedirectURI     string                  `json:"redirect_uri" validate:"required,uri" bun:"redirect_uri,notnull"`
-	ResponseType    utils.ResponseType      `json:"response_type" validate:"required,response-type" bun:"response_type,type:oidc_response_type,notnull"`
+	Scope           []utils.Scope           `json:"scope" schema:"scope,required" validate:"required,dive,scope" bun:"scope,type:oidc_standard_scope[],notnull"` // List of scopes associated with the authorization
+	ClaimsRequested *map[string]interface{} `json:"claims_requested,omitempty" schema:"-" bun:"claims_requested,type:jsonb"`                                     // Optional claims requested by the client, stored as JSON
+	ClaimsGranted   *map[string]interface{} `json:"claims_granted,omitempty" schema:"-" bun:"claims_granted,type:jsonb"`                                         // Optional claims granted by the authorization server, stored as JSON
+	RedirectURI     string                  `json:"redirect_uri" schema:"redirect_uri,required" validate:"required,uri" bun:"redirect_uri,notnull"`
+	ResponseType    utils.ResponseType      `json:"response_type" schema:"response_type,required" validate:"required,response-type" bun:"response_type,type:oidc_response_type,notnull"`
 
-	CodeChallenge       *string           `json:"code_challenge,omitempty" bun:"code_challenge"`                                                // Code challenge for PKCE, if applicable
-	CodeChallengeMethod *utils.PKCEMethod `json:"code_challenge_method,omitempty" validate:"omitempty,pkce-method" bun:"code_challenge_method"` // Method used for the code challenge, if applicable
+	CodeChallenge       *string           `json:"code_challenge,omitempty" schema:"code_challenge" bun:"code_challenge"`                                                       // Code challenge for PKCE, if applicable
+	CodeChallengeMethod *utils.PKCEMethod `json:"code_challenge_method,omitempty" schema:"code_challenge_method" validate:"omitempty,pkce-method" bun:"code_challenge_method"` // Method used for the code challenge, if applicable
 
-	State *string `json:"state,omitempty" bun:"state"` // State parameter for the authorization request, if applicable
-	Nonce *string `json:"nonce,omitempty" bun:"nonce"` // Nonce parameter for the authorization request, if applicable
+	State *string `json:"state,omitempty" schema:"state" bun:"state"` // State parameter for the authorization request, if applicable
+	Nonce *string `json:"nonce,omitempty" schema:"nonce" bun:"nonce"` // Nonce parameter for the authorization request, if applicable
 
-	IsActive bool              `json:"is_active" bun:"is_active"`
-	Status   *utils.AuthStatus `json:"status" validate:"omitempty,auth-status" bun:"status"` // Status of the authorization (e.g., approved, pending, denied, revoked)
+	IsActive bool              `json:"is_active" schema:"-" bun:"is_active"`
+	Status   *utils.AuthStatus `json:"status" schema:"-" validate:"omitempty,auth-status" bun:"status"` // Status of the authorization (e.g., approved, pending, denied, revoked)
 
-	ClientID string  `json:"-" validate:"required" bun:"client_id,notnull"`     // ID of the client associated with the authorization
-	Client   *Client `json:"client" bun:"rel:has-one,join:client_id=client_id"` // Client associated with the authorization
+	ClientID string  `json:"-" schema:"client_id,required" validate:"required" bun:"client_id,notnull"` // ID of the client associated with the authorization
+	Client   *Client `json:"client" schema:"-" bun:"rel:has-one,join:client_id=client_id"`              // Client associated with the authorization
 
-	UserID uuid.UUID `json:"-" bun:"user_id,type:uuid,nullzero"`          // ID of the user associated with the authorization
-	User   *User     `json:"user" bun:"rel:has-one,join:user_id=user_id"` // User associated with the authorization
+	UserID uuid.UUID `json:"-" schema:"-" bun:"user_id,type:uuid,nullzero"`          // ID of the user associated with the authorization
+	User   *User     `json:"user" schema:"-" bun:"rel:has-one,join:user_id=user_id"` // User associated with the authorization
 
-	ReplacedID            uuid.UUID      `json:"-" bun:"replaced_id,type:uuid,nullzero"`
-	ReplacedAuthorization *Authorization `json:"replaced_authorization" bun:"rel:has-one,join:authorization_id=replaced_id"`
+	ReplacedID            uuid.UUID      `json:"-" schema:"-" bun:"replaced_id,type:uuid,nullzero"`
+	ReplacedAuthorization *Authorization `json:"replaced_authorization" schema:"-" bun:"rel:has-one,join:authorization_id=replaced_id"`
+
+	// Additional request parameters for the authorization
+	ClientSecret *string `json:"-" schema:"client_secret" bun:"-"`                                     // Optional client secret for the authorization, if applicable
+	LoginHint    *string `json:"login_hint,omitempty" schema:"login_hint" bun:"-"`                     // Optional login hint for the authorization, if applicable
+	MaxAge       uint16  `json:"max_age,omitempty" schema:"max_age" validate:"omitempty,gt=0" bun:"-"` // Optional maximum age for the authorization, in seconds
 
 	ApprovedAt *time.Time `json:"approved_at,omitempty" bun:"approved_at"` // Timestamp when the authorization was approved, if applicable
 	RevokedAt  *time.Time `json:"revoked_at,omitempty" bun:"revoked_at"`   // Timestamp when the authorization was revoked, if applicable
