@@ -17,7 +17,8 @@ type HTTPErrorResponse struct {
 	StatusCode  int    `validate:"required,min=100,max=599"`
 	Message     string `validate:"required"`
 	Description string
-	RedirectURI string `validate:"omitempty,http_url"`
+	RedirectURI string            `validate:"omitempty,http_url"`
+	Headers     map[string]string `validate:"omitempty"`
 	Template    string
 }
 
@@ -35,6 +36,10 @@ func (e HTTPErrorResponse) Code() int {
 func (e HTTPErrorResponse) Write(w http.ResponseWriter) {
 	if e.Template == "" {
 		e.Template = DEFAULT_HTML_ERROR_TEMPLATE
+	}
+
+	for key, value := range e.Headers {
+		w.Header().Set(key, value)
 	}
 
 	w.Header().Set("Content-Type", "text/html")
