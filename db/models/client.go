@@ -34,15 +34,15 @@ type Client struct {
 	RedirectURIs           []string `json:"redirect_uris" validate:"required,dive,uri" bun:"redirect_uris,type:text[]"`                                    // List of redirect URIs for the client
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris,omitempty" validate:"omitempty,dive,uri" bun:"post_logout_redirect_uris,type:text[]"` // List of post logout redirect URIs for the client
 
-	IsAuthTimeRequired bool `json:"require_auth_time,omitempty" bun:"require_auth_time"` // Whether the client requires auth time
-	IsPKCERequired     bool `json:"require_pkce,omitempty" bun:"require_pkce"`           // Whether the client requires PKCE
+	IsAuthTimeRequired bool `json:"require_auth_time,omitempty" bun:"require_auth_time"`    // Whether the client requires auth time
+	IsPKCERequired     bool `json:"require_pkce,omitempty" bun:"require_pkce,default:true"` // Whether the client requires PKCE
 
 	AccessTokenLifetime  int64 `json:"access_token_lifetime" validate:"omitempty,gt=0" bun:"access_token_lifetime,default:3600"`              // Lifetime of access tokens in seconds
 	RefreshTokenLifetime int64 `json:"refresh_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"refresh_token_lifetime,default:86400"` // Lifetime of refresh tokens in seconds
 	IDTokenLifetime      int64 `json:"id_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"id_token_lifetime,default:300"`             // Lifetime of ID tokens in seconds
 
-	IsActive       *bool `json:"is_active" bun:"is_active,default:true"`             // Whether the client is active
-	IsConfidential *bool `json:"is_confidential" bun:"is_confidential,default:true"` // Whether the client is confidential
+	IsActive       *bool `json:"is_active" bun:"is_active,default:true"`              // Whether the client is active
+	IsConfidential *bool `json:"is_confidential" bun:"is_confidential,default:false"` // Whether the client is confidential
 
 	OwnerID uuid.UUID `json:"-" validate:"required" bun:"owner_id,notnull"`                       // ID of the owner of the client
 	Owner   *User     `json:"owner,omitempty" bun:"rel:belongs-to,join:owner_id=user_id,notnull"` // Owner of the client
@@ -158,7 +158,7 @@ func (c *Client) NewSecret(ctx context.Context, db bun.IDB) (string, errors.HTTP
 		}
 	}
 
-	if c.IsConfidential != nil && !(*c.IsConfidential) {
+	if c.IsConfidential == nil || !(*c.IsConfidential) {
 		return "", errors.JSONAPIError{
 			StatusCode: http.StatusBadRequest,
 			Title:      "Client is not confidential",
@@ -187,7 +187,7 @@ func (c *Client) NewSecret(ctx context.Context, db bun.IDB) (string, errors.HTTP
 }
 
 func (c *Client) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
-	if c.ID == "" && (c.IsConfidential == nil || *c.IsConfidential) {
+	if c.ID == "" && (c.IsConfidential != nil && *c.IsConfidential) {
 		secret, err := c.newSecret()
 		if err != nil {
 			log.Printf("Error generating new client secret: %v", err)
@@ -235,6 +235,8 @@ func GetClientByID(ctx context.Context, db bun.IDB, id string) (*Client, errors.
 		}
 	}
 
+	client.Secret = nil // Clear the secret before returning to avoid leaking sensitive information
+
 	return client, nil
 }
 
@@ -263,6 +265,8 @@ func GetClientByIDAndSecret(ctx context.Context, db bun.IDB, id string, secret s
 			Detail:     "The specified client/client secret combination does not exist.",
 		}
 	}
+
+	client.Secret = nil // Clear the secret before returning to avoid leaking sensitive information
 
 	return client, nil
 }

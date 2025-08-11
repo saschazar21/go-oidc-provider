@@ -83,6 +83,16 @@ func (a *Authorization) Validate() errors.OIDCError {
 		}
 	}
 
+	if a.Client.IsConfidential != nil && *a.Client.IsConfidential && a.ClientSecret == nil {
+		description := "Client is confidential, but no client_secret provided"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &description,
+			RedirectURI:      a.RedirectURI,
+		}
+	}
+
 	if a.CodeChallenge == nil && a.Client.IsPKCERequired {
 		description := "PKCE is required for this client, but no code_challenge provided"
 		log.Println(description)
@@ -153,16 +163,6 @@ func (a *Authorization) Validate() errors.OIDCError {
 // This ensures that the client is properly authenticated,
 // as well as a few other properties, which are not stored in the database.
 func (a *Authorization) ValidateRequest() errors.OIDCError {
-	if a.CodeChallenge == nil && a.ClientSecret == nil {
-		msg := "Either code_challenge or client_secret must be provided."
-		log.Println(msg)
-		return errors.OIDCErrorResponse{
-			ErrorCode:        errors.INVALID_REQUEST,
-			ErrorDescription: &msg,
-			RedirectURI:      a.RedirectURI,
-		}
-	}
-
 	if a.CodeChallenge != nil && a.ClientSecret != nil {
 		msg := "Providing both code_challenge and client_secret is invalid."
 		log.Println(msg)

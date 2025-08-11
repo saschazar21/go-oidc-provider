@@ -174,6 +174,7 @@ func TestGetAuthorizationByID(t *testing.T) {
 	type testStruct struct {
 		name          string
 		authorization *Authorization
+		clientFixture string
 		id            string
 		wantErr       bool
 	}
@@ -182,24 +183,35 @@ func TestGetAuthorizationByID(t *testing.T) {
 		{
 			name:          "Empty ID",
 			authorization: nil,
+			clientFixture: "client_minimal.json",
 			id:            "",
 			wantErr:       true,
 		},
 		{
 			name:          "Nil UUID ID",
 			authorization: nil,
+			clientFixture: "client_minimal.json",
 			id:            uuid.Nil.String(),
 			wantErr:       true,
 		},
 		{
 			name:          "Non-existing ID",
 			authorization: nil,
+			clientFixture: "client_minimal.json",
 			id:            "bb792595-be1f-4e1e-9856-c70c2f8e9d4c",
 			wantErr:       true,
 		},
 		{
 			name:          "Existing ID",
 			authorization: &existingAuth,
+			clientFixture: "client_minimal.json",
+			id:            existingAuth.ID.String(),
+			wantErr:       false,
+		},
+		{
+			name:          "Existing ID",
+			authorization: &existingAuth,
+			clientFixture: "client.json",
 			id:            existingAuth.ID.String(),
 			wantErr:       false,
 		},
@@ -228,7 +240,7 @@ func TestGetAuthorizationByID(t *testing.T) {
 				}
 
 				var client Client
-				if err := loadFixture("client_minimal.json", &client); err != nil {
+				if err := loadFixture(tt.clientFixture, &client); err != nil {
 					t.Fatalf("Failed to load fixture: %v", err)
 				}
 

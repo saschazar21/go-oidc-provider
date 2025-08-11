@@ -133,7 +133,7 @@ CREATE TABLE oidc_clients (
     
     -- Status
     is_active BOOLEAN DEFAULT TRUE,
-    is_confidential BOOLEAN DEFAULT TRUE,
+    is_confidential BOOLEAN DEFAULT FALSE,
 
     -- Constriant: Client secret must be set for confidential clients
     CONSTRAINT chk_client_secret CHECK (

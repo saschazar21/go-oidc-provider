@@ -93,29 +93,35 @@ func TestClient(t *testing.T) {
 					t.Errorf("Expected client ID to be set, got empty string")
 				}
 
-				retrievedClient, err := GetClientByIDAndSecret(ctx, db, client.ID, string(*client.Secret))
-				if err != nil {
-					t.Errorf("GetClientByIDAndSecret() error = %v", err)
+				var retrievedClient *Client
+
+				if client.Secret != nil && *client.Secret != "" {
+					retrievedClient, err = GetClientByIDAndSecret(ctx, db, client.ID, string(*client.Secret))
+					if err != nil {
+						t.Errorf("GetClientByIDAndSecret() error = %v", err)
+					}
+				} else {
+					retrievedClient, err = GetClientByID(ctx, db, client.ID)
+					if err != nil {
+						t.Errorf("GetClientByID() error = %v", err)
+					}
 				}
 
 				assert.Equal(t, client.ID, retrievedClient.ID, "Client ID should match")
 				assert.Equal(t, client.Name, retrievedClient.Name, "Client name should match")
 				assert.Equal(t, client.RedirectURIs, retrievedClient.RedirectURIs, "Redirect URIs should match")
 
-				if client.IsConfidential != nil || (*client.IsConfidential) {
-					assert.NotNil(t, retrievedClient.Secret, "Confidential client should have a secret")
-					assert.NotEmpty(t, *retrievedClient.Secret, "Client secret should not be empty")
-
+				if client.IsConfidential != nil && (*client.IsConfidential) {
 					newSecret, err := retrievedClient.NewSecret(ctx, db)
 
 					if err != nil {
 						t.Errorf("NewSecret() error = %v", err)
 					}
 
+					assert.NotNil(t, retrievedClient.Secret, "Confidential client should have a secret")
+					assert.NotEmpty(t, *retrievedClient.Secret, "Client secret should not be empty")
 					assert.NotEmpty(t, newSecret, "Newly generated client secret should not be empty")
 					assert.Equal(t, *retrievedClient.Secret, utils.HashedString(newSecret), "Hashed secret should match the new secret")
-					assert.NotEqual(t, client.Secret, retrievedClient.Secret, "New secret should be different from the old one")
-
 				} else {
 					assert.Nil(t, retrievedClient.Secret, "Non-confidential client should not have a secret")
 				}
