@@ -214,6 +214,13 @@ func (h *HashedString) Compare(plain []byte) bool {
 	return string(*h) == str
 }
 
+func (h HashedString) String() string {
+	if len(h) == 0 {
+		return ""
+	}
+	return string(h)
+}
+
 type PKCEMethod string
 
 type ResponseType string

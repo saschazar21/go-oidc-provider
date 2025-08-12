@@ -7,7 +7,6 @@ import (
 	"net/url"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/gorilla/schema"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/utils"
 )
@@ -36,9 +35,10 @@ func (ar *authorizationRequest) Validate() errors.OIDCError {
 		}
 	}
 
-	decoder := schema.NewDecoder()
+	var auth Authorization
+	decoder := utils.NewCustomDecoder()
 
-	if err := decoder.Decode(ar.authorization, ar.params); err != nil {
+	if err := decoder.Decode(&auth, ar.params); err != nil {
 		redirectUri := ar.params.Get("redirect_uri")
 
 		msg := "Failed to decode authorization request parameters"
@@ -58,6 +58,8 @@ func (ar *authorizationRequest) Validate() errors.OIDCError {
 			Description: msg,
 		}
 	}
+
+	ar.authorization = &auth
 
 	return nil
 }
@@ -136,33 +138,12 @@ func (a *Authorization) Validate() errors.OIDCError {
 		}
 	}
 
-	if a.Client.IsConfidential != nil && *a.Client.IsConfidential && a.ClientSecret == nil {
-		description := "Client is confidential, but no client_secret provided"
-		log.Println(description)
-		return errors.OIDCErrorResponse{
-			ErrorCode:        errors.INVALID_REQUEST,
-			ErrorDescription: &description,
-			RedirectURI:      a.RedirectURI,
-		}
-	}
-
-	if a.CodeChallenge == nil && a.Client.IsPKCERequired {
+	if a.Client.IsPKCERequired && (a.CodeChallenge == nil || *a.CodeChallenge == "") {
 		description := "PKCE is required for this client, but no code_challenge provided"
 		log.Println(description)
 		return errors.OIDCErrorResponse{
-			ErrorCode:        errors.INVALID_REQUEST,
-			RedirectURI:      a.RedirectURI,
-			ErrorDescription: &description,
-		}
-	}
-
-	if a.ClientSecret != nil && !a.Client.Secret.Compare([]byte(*a.ClientSecret)) {
-		msg := "Client secret does not match the stored secret."
-		log.Println(msg)
-		return errors.OIDCErrorResponse{
-			ErrorCode:        errors.INVALID_CLIENT,
-			ErrorDescription: &msg,
-			RedirectURI:      a.RedirectURI,
+			ErrorCode:   errors.SERVER_ERROR,
+			RedirectURI: a.RedirectURI,
 		}
 	}
 
@@ -197,15 +178,6 @@ func (a *Authorization) Validate() errors.OIDCError {
 			ErrorCode:        errors.INVALID_REQUEST,
 			ErrorDescription: &description,
 			RedirectURI:      a.RedirectURI,
-		}
-	}
-
-	if a.Client.IsPKCERequired && (a.CodeChallenge == nil || *a.CodeChallenge == "") {
-		description := "PKCE is required for this client, but no code_challenge provided"
-		log.Println(description)
-		return errors.OIDCErrorResponse{
-			ErrorCode:   errors.SERVER_ERROR,
-			RedirectURI: a.RedirectURI,
 		}
 	}
 
