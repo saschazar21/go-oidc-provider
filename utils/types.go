@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+type ACR string
+type AMR string
+
 type Marshalable interface {
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON(data []byte) error

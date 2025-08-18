@@ -2,6 +2,23 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Enums
 
+CREATE TYPE oidc_acr_type AS ENUM (
+    'urn:mace:incommon:iap:bronze',  -- Bronze, single-factor authentication
+    'urn:mace:incommon:iap:silver',  -- Silver, multi-factor authentication
+    'urn:mace:incommon:iap:gold'    -- Gold, multi-factor authentication with additional security measures (hardware tokens, etc.)
+);
+
+CREATE TYPE oidc_amr_type AS ENUM (
+    'pwd',                -- Password
+    'otp',                -- One-Time Password
+    'mfa',                -- Multi-Factor Authentication
+    'sms',                -- SMS-based authentication
+    'email',              -- Email-based authentication
+    'push',               -- Push notification
+    'fido',               -- FIDO2/WebAuthn
+    'biometric'         -- Biometric authentication
+);
+
 CREATE TYPE oidc_grant_type AS ENUM (
     'authorization_code',
     'implicit',
@@ -153,9 +170,10 @@ CREATE TABLE oidc_sessions (
     device_info TEXT,
     
     -- Session metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
-    last_accessed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+    last_accessed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     -- Session state
     is_active BOOLEAN DEFAULT TRUE,
@@ -164,9 +182,9 @@ CREATE TABLE oidc_sessions (
     -- OIDC specific
     client_id VARCHAR(255) REFERENCES oidc_clients(client_id) ON DELETE SET NULL,
     scope oidc_standard_scope[],
-    auth_time TIMESTAMP WITH TIME ZONE,
-    acr VARCHAR(50),
-    amr TEXT[] -- Array of authentication methods
+    auth_time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    acr_values oidc_acr_type[], -- Authentication Context Class Reference
+    amr oidc_amr_type[] -- Array of authentication methods
 );
 
 CREATE INDEX idx_oidc_sessions_user ON oidc_sessions(user_id);
@@ -181,6 +199,7 @@ CREATE TABLE oidc_authorizations (
     
     -- Authorization metadata
     scope oidc_standard_scope[] NOT NULL,
+    acr_values oidc_acr_type[], -- Authentication Context Class Reference values
     claims_requested JSONB,
     claims_granted JSONB,
     

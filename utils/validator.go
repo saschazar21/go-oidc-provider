@@ -7,6 +7,8 @@ import (
 )
 
 const (
+	ACR_VALUE     = "acr"
+	AMR_VALUE     = "amr"
 	AUTH_METHOD   = "auth-method"
 	AUTH_STATUS   = "auth-status"
 	DATE          = "date"
@@ -25,6 +27,8 @@ var _customValidator *validator.Validate
 func NewCustomValidator() *validator.Validate {
 	if _customValidator == nil {
 		_customValidator = validator.New()
+		_customValidator.RegisterValidation(ACR_VALUE, validateACR)
+		_customValidator.RegisterValidation(AMR_VALUE, validateAMR)
 		_customValidator.RegisterValidation(AUTH_METHOD, validateAuthMethod)
 		_customValidator.RegisterValidation(AUTH_STATUS, validateAuthStatus)
 		_customValidator.RegisterValidation(DATE, validateDate)
@@ -39,6 +43,51 @@ func NewCustomValidator() *validator.Validate {
 	}
 
 	return _customValidator
+}
+
+func validateACR(fl validator.FieldLevel) bool {
+	acr, ok := fl.Field().Interface().(ACR)
+	if !ok {
+		return false
+	}
+
+	validACRs := []ACR{
+		ACR_BRONZE,
+		ACR_SILVER,
+		ACR_GOLD,
+	}
+
+	for _, validACR := range validACRs {
+		if acr == validACR {
+			return true
+		}
+	}
+	return false
+}
+
+func validateAMR(fl validator.FieldLevel) bool {
+	amr, ok := fl.Field().Interface().(AMR)
+	if !ok {
+		return false
+	}
+
+	validAMRs := []AMR{
+		AMR_PASSWORD,
+		AMR_OTP,
+		AMR_MULTIFACTOR,
+		AMR_SMS,
+		AMR_EMAIL,
+		AMR_PUSH,
+		AMR_FIDO,
+		AMR_BIOMETRIC,
+	}
+
+	for _, validAMR := range validAMRs {
+		if amr == validAMR {
+			return true
+		}
+	}
+	return false
 }
 
 func validateAuthMethod(fl validator.FieldLevel) bool {

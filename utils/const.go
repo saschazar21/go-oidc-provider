@@ -1,9 +1,28 @@
 package utils
 
 const (
-	MASTER_KEY_ENV = "MASTER_KEY"
+	COOKIE_AUTH_KEY_ENV = "COOKIE_AUTH_KEY"
+	COOKIE_ENC_KEY_ENV  = "COOKIE_ENC_KEY"
+	MASTER_KEY_ENV      = "MASTER_KEY"
 
 	DEFAULT_DATE_FORMAT = "2006-01-02"
+)
+
+const (
+	ACR_BRONZE ACR = "urn:mace:incommon:iap:bronze"
+	ACR_SILVER ACR = "urn:mace:incommon:iap:silver"
+	ACR_GOLD   ACR = "urn:mace:incommon:iap:gold"
+)
+
+const (
+	AMR_PASSWORD    AMR = "pwd"
+	AMR_OTP         AMR = "otp"
+	AMR_MULTIFACTOR AMR = "mfa"
+	AMR_SMS         AMR = "sms"
+	AMR_EMAIL       AMR = "email"
+	AMR_PUSH        AMR = "push"
+	AMR_FIDO        AMR = "fido"
+	AMR_BIOMETRIC   AMR = "biometric"
 )
 
 const (

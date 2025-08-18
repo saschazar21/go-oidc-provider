@@ -190,6 +190,12 @@ func (c *Client) Validate() (err error) {
 	return
 }
 
+func (s *Session) Validate() (err error) {
+	err = utils.NewCustomValidator().Struct(s)
+
+	return
+}
+
 func (u *User) Validate() error {
 	if err := utils.NewCustomValidator().Struct(u); err != nil {
 		return err

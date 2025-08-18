@@ -19,9 +19,10 @@ type Authorization struct {
 
 	ID uuid.UUID `json:"-" bun:"authorization_id,pk,type:uuid,default:gen_random_uuid()"` // Unique identifier for the authorization
 
-	Scope           []utils.Scope           `json:"scope" schema:"scope,required" validate:"required,dive,scope" bun:"scope,type:oidc_standard_scope[],notnull"` // List of scopes associated with the authorization
-	ClaimsRequested *map[string]interface{} `json:"claims_requested,omitempty" schema:"-" bun:"claims_requested,type:jsonb"`                                     // Optional claims requested by the client, stored as JSON
-	ClaimsGranted   *map[string]interface{} `json:"claims_granted,omitempty" schema:"-" bun:"claims_granted,type:jsonb"`                                         // Optional claims granted by the authorization server, stored as JSON
+	Scope           []utils.Scope           `json:"scope" schema:"scope,required" validate:"required,dive,scope" bun:"scope,type:oidc_standard_scope[],notnull"`  // List of scopes associated with the authorization
+	ACRValues       *[]utils.ACR            `json:"acr_values,omitempty" schema:"acr_values" validate:"omitempty,dive,acr" bun:"acr_values,type:oidc_acr_type[]"` // Authentication Context Class Reference values
+	ClaimsRequested *map[string]interface{} `json:"claims_requested,omitempty" schema:"-" bun:"claims_requested,type:jsonb"`                                      // Optional claims requested by the client, stored as JSON
+	ClaimsGranted   *map[string]interface{} `json:"claims_granted,omitempty" schema:"-" bun:"claims_granted,type:jsonb"`                                          // Optional claims granted by the authorization server, stored as JSON
 	RedirectURI     string                  `json:"redirect_uri" schema:"redirect_uri,required" validate:"required,uri" bun:"redirect_uri,notnull"`
 	ResponseType    utils.ResponseType      `json:"response_type" schema:"response_type,required" validate:"required,response-type" bun:"response_type,type:oidc_response_type,notnull"`
 
