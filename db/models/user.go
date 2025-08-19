@@ -30,6 +30,9 @@ type Address struct {
 	UpdatedAt
 }
 
+var _ bun.AfterScanRowHook = (*Address)(nil)
+var _ bun.BeforeUpdateHook = (*Address)(nil)
+
 func (a *Address) formatAddress() {
 	if a == nil {
 		return
@@ -56,10 +59,14 @@ func (a *Address) formatAddress() {
 	a.Formatted = &formatted
 }
 
-var _ bun.AfterScanRowHook = (*Address)(nil)
-
 func (a *Address) AfterScanRow(ctx context.Context) error {
 	a.formatAddress()
+
+	return nil
+}
+
+func (a *Address) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
+	a.UpdatedAt.UpdatedAt = time.Now()
 
 	return nil
 }
@@ -129,6 +136,7 @@ type User struct {
 }
 
 var _ bun.AfterScanRowHook = (*User)(nil)
+var _ bun.BeforeUpdateHook = (*User)(nil)
 
 func (u *User) formatName() {
 	if u == nil {
@@ -158,6 +166,12 @@ func (u *User) AfterScanRow(ctx context.Context) error {
 	if u.Address != nil {
 		u.Address.formatAddress()
 	}
+
+	return nil
+}
+
+func (u *User) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
+	u.UpdatedAt.UpdatedAt = time.Now()
 
 	return nil
 }

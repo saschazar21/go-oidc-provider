@@ -51,6 +51,7 @@ type Authorization struct {
 
 	ApprovedAt *time.Time `json:"approved_at,omitempty" bun:"approved_at"` // Timestamp when the authorization was approved, if applicable
 	RevokedAt  *time.Time `json:"revoked_at,omitempty" bun:"revoked_at"`   // Timestamp when the authorization was revoked, if applicable
+
 	CreatedAt
 	ExpiresAt
 }

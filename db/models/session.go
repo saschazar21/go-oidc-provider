@@ -44,6 +44,9 @@ type Session struct {
 	UpdatedAt
 }
 
+var _ bun.AfterSelectHook = (*Session)(nil)
+var _ bun.BeforeUpdateHook = (*Session)(nil)
+
 func (s *Session) save(ctx context.Context, db bun.IDB, excludeColumns ...string) errors.OIDCError {
 	var redirectURI string
 	if s.RedirectURI != nil {
@@ -106,8 +109,6 @@ func (s *Session) save(ctx context.Context, db bun.IDB, excludeColumns ...string
 	return nil
 }
 
-var _ bun.AfterSelectHook = (*Session)(nil)
-
 func (s *Session) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
 	model := query.GetModel().Value()
 
@@ -151,6 +152,29 @@ func (s *Session) AfterSelect(ctx context.Context, query *bun.SelectQuery) error
 			RedirectURI:      redirectURI,
 		}
 	}
+
+	return nil
+}
+
+func (s *Session) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
+	if s.ID == uuid.Nil {
+		i := query.GetModel().Value()
+		session, ok := i.(*Session)
+
+		if !ok {
+			log.Println("BeforeUpdate: model is not a Session")
+			return nil
+		}
+
+		s = session
+	}
+
+	if s.ID == uuid.Nil {
+		log.Println("BeforeUpdate: Session ID is nil")
+		return nil
+	}
+
+	s.UpdatedAt.UpdatedAt = time.Now()
 
 	return nil
 }
@@ -276,8 +300,6 @@ func LogoutSession(ctx context.Context, db bun.IDB, sessionID uuid.UUID, reason 
 			return nil
 		}
 	}
-
-	session.ExpiresAt.ExpiresAt = time.Now()
 
 	excludeColumns := []string{"session_id", "user_id", "client_id", "created_at", "updated_at", "last_accessed_at"}
 

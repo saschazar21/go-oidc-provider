@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -50,6 +51,8 @@ type Client struct {
 	CreatedAt
 	UpdatedAt
 }
+
+var _ bun.BeforeUpdateHook = (*Client)(nil)
 
 func (c *Client) newSecret() (string, error) {
 	secret, err := utils.RandomBase58String(CLIENT_SECRET_BYTE_SIZE)
@@ -146,6 +149,12 @@ func (c *Client) save(ctx context.Context, db bun.IDB, excludedColumns ...string
 	}
 
 	c.Secret = nil // Clear the secret before returning to avoid leaking sensitive information
+	return nil
+}
+
+func (c *Client) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
+	c.UpdatedAt.UpdatedAt = time.Now()
+
 	return nil
 }
 

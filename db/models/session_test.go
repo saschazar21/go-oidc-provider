@@ -128,6 +128,15 @@ func TestSession(t *testing.T) {
 					assert.NotNil(t, retrievedSession.Client, "Retrieved session Client should not be nil")
 				}
 
+				updatedSession, err := GetSessionByID(ctx, db, session.ID.String())
+				if err != nil {
+					t.Fatalf("GetSessionByID() error = %v", err)
+				}
+
+				assert.NotEqual(t, retrievedSession.LastAccessedAt, updatedSession.LastAccessedAt, "LastAccessedAt should be updated after save")
+				assert.Equal(t, retrievedSession.AuthTime, updatedSession.AuthTime, "AuthTime should be updated after save")
+				assert.NotEqual(t, retrievedSession.ExpiresAt.ExpiresAt, updatedSession.ExpiresAt.ExpiresAt, "ExpiresAt should be updated after save")
+
 			} else {
 				assert.Empty(t, session.ID, "Session ID should be empty if save fails")
 			}
