@@ -18,14 +18,14 @@ type Session struct {
 	bun.BaseModel `bun:"table:oidc_sessions"`
 
 	ID         uuid.UUID              `json:"-" schema:"-" bun:"session_id,pk,type:uuid,default:gen_random_uuid()"`
-	IPAddress  *utils.EncryptedString `json:"-" schema:"-" bun:"ip_address,type:bytea"`                                            // Encrypted IP address of the session
+	IPAddress  *utils.EncryptedString `json:"-" schema:"-" validate:"omitempty,ip_addr" bun:"ip_address,type:bytea"`               // Encrypted IP address of the session
 	UserAgent  *string                `json:"-" schema:"-" bun:"user_agent"`                                                       // User agent string of the session
 	DeviceInfo *string                `json:"-" schema:"-" bun:"device_info"`                                                      // Optional device information for the session
 	Scope      *[]utils.Scope         `json:"-" schema:"-" validate:"omitempty,dive,scope" bun:"scope,type:oidc_standard_scope[]"` // List of scopes associated with the session
 	ACRValues  *[]utils.ACR           `json:"-" schema:"-" validate:"omitempty,dive,acr" bun:"acr_values,type:oidc_acr_type[]"`    // Authentication Context Class Reference (ACR) that initiated the session
 	AMR        *[]utils.AMR           `json:"-" schema:"-" validate:"omitempty,dive,amr" bun:"amr,type:oidc_amr_type[]"`           // Authentication Methods References (AMR) that initiated the session
 
-	IsActive     bool    `json:"is_active" schema:"-" bun:"is_active,default:true"`                                              // Whether the session is active
+	IsActive     *bool   `json:"is_active" schema:"-" bun:"is_active,default:true"`                                              // Whether the session is active
 	LogoutReason *string `json:"logout_reason,omitempty" validate:"omitempty,lt=100" schema:"logout_reason" bun:"logout_reason"` // Optional reason for session logout
 
 	RedirectURI *string `json:"-" schema:"-" validate:"omitempty,uri" bun:"-"`
@@ -259,9 +259,13 @@ func GetSessionByID(ctx context.Context, db bun.IDB, id string) (*Session, error
 	err := db.NewSelect().
 		Model(&session).
 		WherePK().
-		Where("session.is_active = ?", true).
-		Where("session.expires_at > ?", time.Now()).
-		Relation("User").
+		Where("\"session\".\"is_active\" = ?", true).
+		Where("\"session\".\"expires_at\" > ?", time.Now()).
+		Relation("User", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				Where("\"user\".\"is_active\" = ?", true).
+				Where("\"user\".\"is_locked\" = ?", false)
+		}).
 		Relation("Client").
 		Scan(ctx, &session)
 
@@ -277,26 +281,38 @@ func GetSessionByID(ctx context.Context, db bun.IDB, id string) (*Session, error
 	return &session, nil
 }
 
-func LogoutSession(ctx context.Context, db bun.IDB, sessionID uuid.UUID, reason *string) errors.OIDCError {
-	if sessionID == uuid.Nil {
+func LogoutSession(ctx context.Context, db bun.IDB, sessionID string, reason *string) errors.OIDCError {
+	if sessionID == "" {
 		return nil
 	}
 
+	uid, err := uuid.Parse(sessionID)
+	if err != nil || uid == uuid.Nil {
+		log.Printf("Invalid session ID format: %v", err)
+		return errors.HTTPErrorResponse{
+			StatusCode:  http.StatusBadRequest,
+			Message:     errors.BAD_REQUEST,
+			Description: "The session ID must be a valid UUID.",
+		}
+	}
+
+	isActive := false
+
 	session := &Session{
-		ID:           sessionID,
-		IsActive:     false,
+		ID:           uid,
+		IsActive:     &isActive,
 		LogoutReason: reason,
 	}
 
 	if session.ID != uuid.Nil {
 		isExisting, err := db.NewSelect().
 			Model(session).
-			WherePK(session.ID.String()).
+			WherePK().
 			Column("session_id").
 			Exists(ctx)
 
 		if !isExisting || err != nil {
-			log.Printf("Attempting to log out invalid session ID %s (error: %v)", sessionID.String(), err)
+			log.Printf("Attempting to log out invalid session ID %s (error: %v)", sessionID, err)
 			return nil
 		}
 	}
@@ -304,7 +320,7 @@ func LogoutSession(ctx context.Context, db bun.IDB, sessionID uuid.UUID, reason 
 	excludeColumns := []string{"session_id", "user_id", "client_id", "created_at", "updated_at", "last_accessed_at"}
 
 	if err := session.save(ctx, db, excludeColumns...); err != nil {
-		log.Printf("Failed to log out session %s: %v", sessionID.String(), err)
+		log.Printf("Failed to log out session %s: %v", sessionID, err)
 		return err
 	}
 

@@ -106,9 +106,9 @@ type User struct {
 	ID                    uuid.UUID              `json:"sub" bun:"user_id,type:uuid,pk,default:gen_random_uuid()"`
 	Email                 *utils.EncryptedString `json:"email" validate:"required,email" bun:"email,type:bytea,unique,notnull"` // encrypt
 	EmailHash             *utils.HashedString    `json:"-" bun:"email_hash,type:bytea,unique,notnull"`                          // hashed base64-url-encoded
-	IsEmailVerified       bool                   `json:"email_verified" bun:"email_verified,notnull"`
+	IsEmailVerified       *bool                  `json:"email_verified" bun:"email_verified,notnull"`
 	PhoneNumber           *string                `json:"phone_number" validate:"omitempty,e164" bun:"phone_number,type:bytea,unique"` // encrypt
-	IsPhoneNumberVerified bool                   `json:"phone_number_verified" bun:"phone_number_verified"`
+	IsPhoneNumberVerified *bool                  `json:"phone_number_verified" bun:"phone_number_verified"`
 	GivenName             *utils.EncryptedString `json:"given_name" validate:"omitempty,alphanumunicode" bun:"given_name,type:bytea"`   // encrypt
 	FamilyName            *utils.EncryptedString `json:"family_name" validate:"omitempty,alphanumunicode" bun:"family_name,type:bytea"` // encrypt
 	MiddleName            *utils.EncryptedString `json:"middle_name" validate:"omitempty,alphanumunicode" bun:"middle_name,type:bytea"` // encrypt
@@ -124,8 +124,8 @@ type User struct {
 	Locale                *string                `json:"locale" validate:"omitempty,bcp47_language_tag" bun:"locale"`
 
 	LastLoginAt *time.Time `json:"last_login_at" validate:"omitempty,time-lte-now" bun:"last_login_at"`
-	IsActive    bool       `json:"is_active" bun:"is_active,notnull,default:true"`
-	IsLocked    bool       `json:"is_locked" bun:"is_locked,notnull,default:false"`
+	IsActive    *bool      `json:"is_active" bun:"is_active,notnull,default:true"`
+	IsLocked    *bool      `json:"is_locked" bun:"is_locked,notnull,default:false"`
 
 	CustomClaims *map[string]interface{} `json:"custom_claims" validate:"omitempty" bun:"custom_claims,type:jsonb"`
 
@@ -221,7 +221,7 @@ func (u *User) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 		return err
 	}
 
-	u.Email = &email // restore e-mail after hashing
+	*u.Email = email // restore e-mail after hashing
 	u.EmailHash = nil
 
 	if u.Address != nil {
@@ -289,6 +289,7 @@ func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelW
 			Model(model).
 			Where(fmt.Sprintf("\"%s\".\"%s_id\" = ?", t, t), model.GetID()).
 			ExcludeColumn(fmt.Sprintf("%s_id", t), "created_at", "updated_at").
+			OmitZero().
 			Returning("*").
 			Exec(ctx, model)
 	} else {

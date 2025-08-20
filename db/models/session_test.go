@@ -13,6 +13,9 @@ import (
 
 const SESSION_TEST_INIT = "session_test_init"
 
+var INVALID_CLIENT_ID = "invalid client ID"
+var INVALID_IP_ADDRESS = utils.EncryptedString("invalid_ip")
+
 func TestSession(t *testing.T) {
 	t.Setenv(test.ROOT_DIR_ENV, "../../")
 
@@ -59,9 +62,11 @@ func TestSession(t *testing.T) {
 	AMR := []utils.AMR{"pwd", "otp"}
 
 	type testStruct struct {
-		Name    string
-		Session Session
-		WantErr bool
+		Name            string
+		Session         Session
+		MutateUser      func(*User)
+		WantErr         bool
+		WantRetrieveErr bool
 	}
 
 	tests := []testStruct{
@@ -70,7 +75,8 @@ func TestSession(t *testing.T) {
 			Session: Session{
 				UserID: user.ID,
 			},
-			WantErr: false,
+			WantErr:         false,
+			WantRetrieveErr: false,
 		},
 		{
 			Name: "Full Session",
@@ -84,7 +90,39 @@ func TestSession(t *testing.T) {
 				ACRValues:  &ACRValues,
 				AMR:        &AMR,
 			},
-			WantErr: false,
+			WantErr:         false,
+			WantRetrieveErr: false,
+		},
+		{
+			Name: "Session with Invalid User",
+			Session: Session{
+				UserID: user.ID,
+			},
+			MutateUser: func(u *User) {
+				isActive := false
+				u.IsActive = &isActive
+			},
+			WantErr:         false,
+			WantRetrieveErr: true,
+		},
+		{
+			Name: "Session with Invalid Client",
+			Session: Session{
+				UserID:   user.ID,
+				ClientID: &INVALID_CLIENT_ID,
+			},
+			WantErr:         true,
+			WantRetrieveErr: true,
+		},
+		{
+			Name: "Session with Invalid IP Address",
+			Session: Session{
+				UserID:    user.ID,
+				ClientID:  &client.ID,
+				IPAddress: &INVALID_IP_ADDRESS,
+			},
+			WantErr:         true,
+			WantRetrieveErr: true,
 		},
 	}
 
@@ -106,39 +144,52 @@ func TestSession(t *testing.T) {
 
 			session := tt.Session
 			if err := session.Save(ctx, db); (err != nil) != tt.WantErr {
-				t.Errorf("Save() error = %v, wantErr %v", err, tt.WantErr)
+				t.Fatalf("Save() error = %v, wantErr %v", err, tt.WantErr)
 			}
 
-			if !tt.WantErr {
-				assert.NotEmpty(t, session.ID, "Session ID should not be empty after save")
-				assert.NotEmpty(t, session.CreatedAt, "Session CreatedAt should not be empty after save")
-				assert.NotEmpty(t, session.UpdatedAt, "Session UpdatedAt should not be empty after save")
+			if tt.MutateUser != nil {
+				updatedUser := user
 
-				retrievedSession, err := GetSessionByID(ctx, db, session.ID.String())
+				tt.MutateUser(&updatedUser)
+				if err := updatedUser.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save user: %v", err)
+				}
+			}
+
+			retrievedSession, err := GetSessionByID(ctx, db, session.ID.String())
+			if (err != nil) != tt.WantRetrieveErr {
+				t.Fatalf("GetSessionByID() error = %v, wantRetrieveErr %v", err, tt.WantRetrieveErr)
+			}
+
+			if retrievedSession != nil {
+				assert.Equal(t, session.ID, retrievedSession.ID, "Session ID mismatch")
+				assert.Equal(t, session.UserID, retrievedSession.UserID, "User ID mismatch")
+				assert.Equal(t, session.ClientID, retrievedSession.ClientID, "Client ID mismatch")
+				assert.Equal(t, session.IPAddress, retrievedSession.IPAddress, "IP Address mismatch")
+				assert.Equal(t, session.UserAgent, retrievedSession.UserAgent, "User Agent mismatch")
+				assert.Equal(t, session.DeviceInfo, retrievedSession.DeviceInfo, "Device Info mismatch")
+				assert.Equal(t, session.Scope, retrievedSession.Scope, "Scope mismatch")
+				assert.Equal(t, session.ACRValues, retrievedSession.ACRValues, "ACR Values mismatch")
+				assert.Equal(t, session.AMR, retrievedSession.AMR, "AMR mismatch")
+
+				updatedRetrievedSession, err := GetSessionByID(ctx, db, retrievedSession.ID.String())
 				if err != nil {
-					t.Fatalf("GetSessionByID() error = %v", err)
+					t.Fatalf("GetSessionByID() after save error = %v", err)
 				}
 
-				assert.Equal(t, session.ID, retrievedSession.ID, "Retrieved session ID should match saved session ID")
-				assert.Equal(t, session.UserID, retrievedSession.UserID, "Retrieved session UserID should match saved session UserID")
-				assert.NotNil(t, retrievedSession.User, "Retrieved session User should not be nil")
+				assert.Equal(t, retrievedSession.ID, updatedRetrievedSession.ID, "Updated Session ID mismatch")
+				assert.NotEqual(t, retrievedSession.UpdatedAt, updatedRetrievedSession.UpdatedAt, "UpdatedAt should have changed after save")
+				assert.NotEqual(t, retrievedSession.LastAccessedAt, updatedRetrievedSession.LastAccessedAt, "LastAccessedAt should have changed after save")
 
-				if session.ClientID != nil {
-					assert.Equal(t, *session.ClientID, *retrievedSession.ClientID, "Retrieved session ClientID should match saved session ClientID")
-					assert.NotNil(t, retrievedSession.Client, "Retrieved session Client should not be nil")
+				msg := "Test Logout"
+				if err := LogoutSession(ctx, db, retrievedSession.ID.String(), &msg); err != nil {
+					t.Fatalf("LogoutSession() error = %v", err)
 				}
 
-				updatedSession, err := GetSessionByID(ctx, db, session.ID.String())
-				if err != nil {
-					t.Fatalf("GetSessionByID() error = %v", err)
+				_, err = GetSessionByID(ctx, db, retrievedSession.ID.String())
+				if err == nil {
+					t.Fatalf("GetSessionByID() after logout should have returned an error, got nil")
 				}
-
-				assert.NotEqual(t, retrievedSession.LastAccessedAt, updatedSession.LastAccessedAt, "LastAccessedAt should be updated after save")
-				assert.Equal(t, retrievedSession.AuthTime, updatedSession.AuthTime, "AuthTime should be updated after save")
-				assert.NotEqual(t, retrievedSession.ExpiresAt.ExpiresAt, updatedSession.ExpiresAt.ExpiresAt, "ExpiresAt should be updated after save")
-
-			} else {
-				assert.Empty(t, session.ID, "Session ID should be empty if save fails")
 			}
 		})
 	}
