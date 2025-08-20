@@ -52,7 +52,7 @@ type Client struct {
 	UpdatedAt
 }
 
-var _ bun.BeforeUpdateHook = (*Client)(nil)
+var _ bun.BeforeAppendModelHook = (*Client)(nil)
 
 func (c *Client) newSecret() (string, error) {
 	secret, err := utils.RandomBase58String(CLIENT_SECRET_BYTE_SIZE)
@@ -111,19 +111,6 @@ func (c *Client) save(ctx context.Context, db bun.IDB, excludedColumns ...string
 			Returning("*").
 			Exec(ctx, c)
 	} else {
-		var id string
-		id, err = utils.RandomBase58String(CLIENT_ID_BYTE_SIZE, CLIENT_ID_PREFIX)
-
-		if err != nil {
-			log.Printf("Error generating client ID: %v", err)
-			return errors.JSONAPIError{
-				StatusCode: http.StatusInternalServerError,
-				Title:      "Failed to generate client ID",
-				Detail:     "An error occurred while generating the client ID.",
-			}
-		}
-
-		c.ID = id
 		result, err = db.NewInsert().
 			Model(c).
 			ExcludeColumn(excludedColumns...).
@@ -152,8 +139,26 @@ func (c *Client) save(ctx context.Context, db bun.IDB, excludedColumns ...string
 	return nil
 }
 
-func (c *Client) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
-	c.UpdatedAt.UpdatedAt = time.Now()
+func (c *Client) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	switch query.(type) {
+	case *bun.InsertQuery:
+		id, err := utils.RandomBase58String(CLIENT_ID_BYTE_SIZE, CLIENT_ID_PREFIX)
+
+		if err != nil {
+			log.Printf("Error generating client ID: %v", err)
+			return errors.JSONAPIError{
+				StatusCode: http.StatusInternalServerError,
+				Title:      "Failed to generate client ID",
+				Detail:     "An error occurred while generating the client ID.",
+			}
+		}
+
+		c.ID = id
+		c.CreatedAt.CreatedAt = time.Now()
+		c.UpdatedAt.UpdatedAt = time.Now()
+	case *bun.UpdateQuery:
+		c.UpdatedAt.UpdatedAt = time.Now()
+	}
 
 	return nil
 }

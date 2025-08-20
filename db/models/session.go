@@ -45,7 +45,7 @@ type Session struct {
 }
 
 var _ bun.AfterSelectHook = (*Session)(nil)
-var _ bun.BeforeUpdateHook = (*Session)(nil)
+var _ bun.BeforeAppendModelHook = (*Session)(nil)
 
 func (s *Session) save(ctx context.Context, db bun.IDB, excludeColumns ...string) errors.OIDCError {
 	var redirectURI string
@@ -156,26 +156,19 @@ func (s *Session) AfterSelect(ctx context.Context, query *bun.SelectQuery) error
 	return nil
 }
 
-func (s *Session) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
-	if s.ID == uuid.Nil {
-		i := query.GetModel().Value()
-		session, ok := i.(*Session)
+func (s *Session) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	switch query.(type) {
+	case *bun.InsertQuery:
+		s.CreatedAt.CreatedAt = time.Now()
+		s.UpdatedAt.UpdatedAt = time.Now()
+		s.LastAccessedAt = time.Now()
 
-		if !ok {
-			log.Println("BeforeUpdate: model is not a Session")
-			return nil
+		if s.ExpiresAt.ExpiresAt.IsZero() {
+			s.ExpiresAt.ExpiresAt = time.Now().Add(24 * time.Hour) // Default expiration time of 24 hours
 		}
-
-		s = session
+	case *bun.UpdateQuery:
+		s.UpdatedAt.UpdatedAt = time.Now()
 	}
-
-	if s.ID == uuid.Nil {
-		log.Println("BeforeUpdate: Session ID is nil")
-		return nil
-	}
-
-	s.UpdatedAt.UpdatedAt = time.Now()
-
 	return nil
 }
 

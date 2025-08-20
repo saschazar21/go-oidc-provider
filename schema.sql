@@ -297,13 +297,14 @@ CREATE INDEX idx_oidc_tokens_custom ON oidc_tokens(is_custom) WHERE is_custom = 
 CREATE TABLE oidc_magic_link_whitelist (
     whitelist_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email BYTEA UNIQUE NOT NULL,
+    email_hash BYTEA UNIQUE NOT NULL,
     
     -- Metadata
-    added_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     added_by UUID REFERENCES oidc_users(user_id) ON DELETE SET NULL,
     
-    -- Expiration if needed
-    expires_at TIMESTAMP WITH TIME ZONE,
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '24 hours',
     
     -- Optional metadata
     reason TEXT,
@@ -319,9 +320,9 @@ CREATE TABLE oidc_magic_link_tokens (
     user_id UUID REFERENCES oidc_users(user_id) ON DELETE CASCADE,
     
     -- Token metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() + INTERVAL '10 minutes',
-    consumed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '10 minutes',
+    consumed_at TIMESTAMPTZ,
     
     -- Usage data
     ip_address BYTEA,

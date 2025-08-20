@@ -136,7 +136,7 @@ type User struct {
 }
 
 var _ bun.AfterScanRowHook = (*User)(nil)
-var _ bun.BeforeUpdateHook = (*User)(nil)
+var _ bun.BeforeAppendModelHook = (*User)(nil)
 
 func (u *User) formatName() {
 	if u == nil {
@@ -170,8 +170,28 @@ func (u *User) AfterScanRow(ctx context.Context) error {
 	return nil
 }
 
-func (u *User) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
-	u.UpdatedAt.UpdatedAt = time.Now()
+func (u *User) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	switch query.(type) {
+	case *bun.InsertQuery:
+		u.CreatedAt.CreatedAt = time.Now()
+		u.UpdatedAt.UpdatedAt = time.Now()
+		if u.IsActive == nil {
+			isActive := true
+			u.IsActive = &isActive
+		}
+		if u.IsLocked == nil {
+			isLocked := false
+			u.IsLocked = &isLocked
+		}
+		if u.EmailHash == nil && u.Email != nil {
+			u.EmailHash = (*utils.HashedString)(u.Email)
+		}
+	case *bun.UpdateQuery:
+		u.UpdatedAt.UpdatedAt = time.Now()
+		if u.EmailHash == nil && u.Email != nil {
+			u.EmailHash = (*utils.HashedString)(u.Email)
+		}
+	}
 
 	return nil
 }
