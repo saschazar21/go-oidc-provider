@@ -69,6 +69,12 @@ const (
 )
 
 const (
+	SUCCESS Result = "success"
+	FAILED  Result = "failed"
+	EXPIRED Result = "expired"
+)
+
+const (
 	OPENID         Scope = "openid"
 	PROFILE        Scope = "profile"
 	EMAIL          Scope = "email"

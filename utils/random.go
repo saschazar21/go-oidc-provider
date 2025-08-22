@@ -51,3 +51,24 @@ func RandomBase58String(n int, prefix ...string) (string, error) {
 
 	return fmt.Sprintf("%s%s", p, string(result)), nil
 }
+
+func RandomDigitString(n int) (string, error) {
+	if n <= 0 {
+		return "", fmt.Errorf("desired random digit size must be greater than 0, received: %d", n)
+	}
+	if n > 1024 {
+		return "", fmt.Errorf("desired random digit size must be less than or equal to 1024, received: %d", n)
+	}
+
+	data, err := RandomBytes(n)
+	if err != nil {
+		return "", err
+	}
+
+	random := ""
+	for _, b := range data {
+		random = fmt.Sprintf("%s%d", random, b%10)
+	}
+
+	return random, nil
+}

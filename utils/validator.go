@@ -15,6 +15,7 @@ const (
 	GRANT_TYPE    = "grant-type"
 	PKCE_METHOD   = "pkce-method"
 	RESPONSE_TYPE = "response-type"
+	RESULT        = "result"
 	SCOPE         = "scope"
 	TIME_GT_NOW   = "time-gt-now"
 	TIME_LT_NOW   = "time-lt-now"
@@ -35,6 +36,7 @@ func NewCustomValidator() *validator.Validate {
 		_customValidator.RegisterValidation(GRANT_TYPE, validateGrantType)
 		_customValidator.RegisterValidation(PKCE_METHOD, validatePKCEMethod)
 		_customValidator.RegisterValidation(RESPONSE_TYPE, validateResponseType)
+		_customValidator.RegisterValidation(RESULT, validateResult)
 		_customValidator.RegisterValidation(SCOPE, validateScope)
 		_customValidator.RegisterValidation(TIME_GT_NOW, validateTimeGtNow)
 		_customValidator.RegisterValidation(TIME_LT_NOW, validateTimeLtNow)
@@ -227,6 +229,26 @@ func validateResponseType(fl validator.FieldLevel) bool {
 
 	for _, validResponseType := range validResponseTypes {
 		if responseType == validResponseType {
+			return true
+		}
+	}
+	return false
+}
+
+func validateResult(fl validator.FieldLevel) bool {
+	result, ok := fl.Field().Interface().(Result)
+	if !ok {
+		return false
+	}
+
+	validResults := []Result{
+		SUCCESS,
+		FAILED,
+		EXPIRED,
+	}
+
+	for _, validResult := range validResults {
+		if result == validResult {
 			return true
 		}
 	}

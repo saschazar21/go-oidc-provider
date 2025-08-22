@@ -190,6 +190,12 @@ func (c *Client) Validate() (err error) {
 	return
 }
 
+func (m *MagicLinkToken) Validate() (err error) {
+	err = utils.NewCustomValidator().Struct(m)
+
+	return err
+}
+
 func (m *MagicLinkWhitelist) Validate() (err error) {
 	err = utils.NewCustomValidator().Struct(m)
 

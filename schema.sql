@@ -316,12 +316,12 @@ CREATE INDEX idx_oidc_magic_whitelist_email ON oidc_magic_link_whitelist(email);
 CREATE TABLE oidc_magic_link_tokens (
     token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     token BYTEA UNIQUE NOT NULL,
-    email BYTEA NOT NULL,
-    user_id UUID REFERENCES oidc_users(user_id) ON DELETE CASCADE,
+    email BYTEA NOT NULL REFERENCES oidc_users(email_hash) ON DELETE CASCADE,
     
     -- Token metadata
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '10 minutes',
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '5 minutes',
     consumed_at TIMESTAMPTZ,
     
     -- Usage data
@@ -337,7 +337,6 @@ CREATE TABLE oidc_magic_link_tokens (
 
 CREATE INDEX idx_oidc_magic_tokens_token ON oidc_magic_link_tokens(token);
 CREATE INDEX idx_oidc_magic_tokens_email ON oidc_magic_link_tokens(email);
-CREATE INDEX idx_oidc_magic_tokens_user ON oidc_magic_link_tokens(user_id);
 
 -- Functions
 
@@ -418,7 +417,7 @@ FOR EACH STATEMENT EXECUTE FUNCTION clean_expired_records('3 days');
 
 CREATE OR REPLACE TRIGGER delete_expired_magic_link_tokens
 AFTER INSERT OR UPDATE ON oidc_magic_link_tokens
-FOR EACH STATEMENT EXECUTE FUNCTION clean_expired_records('1 hour');
+FOR EACH STATEMENT EXECUTE FUNCTION clean_expired_records('1 day');
 
 CREATE OR REPLACE TRIGGER delete_expired_magic_link_whitelist
 AFTER INSERT OR UPDATE ON oidc_magic_link_whitelist

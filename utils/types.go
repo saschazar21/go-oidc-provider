@@ -228,4 +228,6 @@ type PKCEMethod string
 
 type ResponseType string
 
+type Result string
+
 type Scope string
