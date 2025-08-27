@@ -255,7 +255,7 @@ CREATE TABLE oidc_tokens (
     -- jwt_claims JSONB,
     
     -- Timestamps
-    issued_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ,
     last_used_at TIMESTAMPTZ,

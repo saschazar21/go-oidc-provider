@@ -21,6 +21,7 @@ const (
 	TIME_LT_NOW   = "time-lt-now"
 	TIME_GTE_NOW  = "time-gte-now"
 	TIME_LTE_NOW  = "time-lte-now"
+	TOKEN_TYPE    = "token-type"
 )
 
 var _customValidator *validator.Validate
@@ -42,6 +43,7 @@ func NewCustomValidator() *validator.Validate {
 		_customValidator.RegisterValidation(TIME_LT_NOW, validateTimeLtNow)
 		_customValidator.RegisterValidation(TIME_GTE_NOW, validateTimeGteNow)
 		_customValidator.RegisterValidation(TIME_LTE_NOW, validateTimeLteNow)
+		_customValidator.RegisterValidation(TOKEN_TYPE, validateTokenType)
 	}
 
 	return _customValidator
@@ -507,4 +509,25 @@ func validateTimeLteNow(fl validator.FieldLevel) bool {
 	default:
 		return false
 	}
+}
+
+func validateTokenType(fl validator.FieldLevel) bool {
+	tokenType, ok := fl.Field().Interface().(TokenType)
+	if !ok {
+		return false
+	}
+
+	validTokenTypes := []TokenType{
+		AUTHORIZATION_CODE_TYPE,
+		ACCESS_TOKEN_TYPE,
+		REFRESH_TOKEN_TYPE,
+		CLIENT_CREDENTIALS_TYPE,
+	}
+
+	for _, validTokenType := range validTokenTypes {
+		if tokenType == validTokenType {
+			return true
+		}
+	}
+	return false
 }

@@ -231,3 +231,5 @@ type ResponseType string
 type Result string
 
 type Scope string
+
+type TokenType string

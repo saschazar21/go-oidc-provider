@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/utils"
 )
@@ -204,6 +205,45 @@ func (m *MagicLinkWhitelist) Validate() (err error) {
 
 func (s *Session) Validate() (err error) {
 	err = utils.NewCustomValidator().Struct(s)
+
+	return
+}
+
+func (t *Token) Validate() (err error) {
+	if err = utils.NewCustomValidator().Struct(t); err != nil {
+		return err
+	}
+
+	if t.IsCustom {
+		if t.Type != utils.ACCESS_TOKEN_TYPE {
+			return fmt.Errorf("custom tokens must be of type access_token")
+		}
+
+		if t.UserID == nil || *t.UserID == uuid.Nil {
+			return fmt.Errorf("custom token must be associated with a user")
+		}
+
+		if t.ClientID != nil || t.AuthorizationID != nil {
+			return fmt.Errorf("custom token cannot be associated with a client or authorization")
+		}
+	} else {
+		if t.UserID != nil {
+			return fmt.Errorf("non-custom tokens cannot be associated with a user")
+		}
+
+		if (t.AuthorizationID == nil || *t.AuthorizationID == uuid.Nil) && t.Type != utils.CLIENT_CREDENTIALS_TYPE {
+			return fmt.Errorf("non-client_credentials tokens must be associated with an authorization")
+		}
+	}
+
+	if t.Type == utils.CLIENT_CREDENTIALS_TYPE {
+		if t.ClientID == nil || *t.ClientID == "" {
+			return fmt.Errorf("client credentials token must be associated with a client")
+		}
+		if t.UserID != nil || t.AuthorizationID != nil {
+			return fmt.Errorf("client credentials token cannot be associated with a user or authorization")
+		}
+	}
 
 	return
 }

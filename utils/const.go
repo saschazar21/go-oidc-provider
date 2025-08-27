@@ -86,3 +86,10 @@ const (
 	DELETE         Scope = "delete"
 	OFFLINE_ACCESS Scope = "offline_access"
 )
+
+const (
+	AUTHORIZATION_CODE_TYPE TokenType = "authorization_code"
+	ACCESS_TOKEN_TYPE       TokenType = "access_token"
+	REFRESH_TOKEN_TYPE      TokenType = "refresh_token"
+	CLIENT_CREDENTIALS_TYPE TokenType = "client_credentials"
+)
