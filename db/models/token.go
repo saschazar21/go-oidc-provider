@@ -382,9 +382,39 @@ func GetTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, exclude
 		Where("\"token\".\"token_value\" = ?", hashedValue).
 		Where("\"token\".\"is_active\" = ?", true).
 		Where("\"token\".\"expires_at\" > ?", time.Now()).
-		Relation("Authorization").
-		Relation("Client").
-		Relation("User").
+		Relation("Authorization", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+					return sq.
+						Where("\"token\".\"authorization_id\" IS NULL").
+						WhereGroup(" OR ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+							return sq.
+								Where("\"authorization\".\"status\" = ?", "approved").
+								Where("\"authorization\".\"is_active\" = ?", true).
+								Where("\"authorization\".\"expires_at\" > ?", time.Now())
+						})
+				})
+		}).
+		Relation("Client", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+					return sq.
+						Where("\"token\".\"client_id\" IS NULL").
+						WhereOr("\"client\".\"is_active\" = ?", true)
+				})
+		}).
+		Relation("User", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+					return sq.
+						Where("\"token\".\"user_id\" IS NULL").
+						WhereGroup(" OR ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+							return sq.
+								Where("\"user\".\"is_active\" = ?", true).
+								Where("\"user\".\"is_locked\" = ?", false)
+						})
+				})
+		}).
 		ExcludeColumn(excludeColumns...).
 		Scan(ctx)
 

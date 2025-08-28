@@ -21,6 +21,8 @@ type OIDCErrorResponse struct {
 	State            *string       `json:"state,omitempty" schema:"state"`
 
 	RedirectURI string `json:"-" validate:"http_url" schema:"-"`
+	IsFragment  bool   `json:"-" schema:"-"`
+	StatusCode  int    `json:"-" schema:"-"`
 }
 
 func (e OIDCErrorResponse) Error() string {
@@ -70,9 +72,17 @@ func (e OIDCErrorResponse) Write(w http.ResponseWriter) {
 		return
 	}
 
-	u.RawQuery = query.Encode()
+	if e.IsFragment {
+		u.Fragment = query.Encode()
+	} else {
+		u.RawQuery = query.Encode()
+	}
 
-	w.WriteHeader(http.StatusFound)
+	if e.StatusCode < 100 {
+		e.StatusCode = http.StatusFound
+	}
+
+	w.WriteHeader(e.StatusCode)
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
