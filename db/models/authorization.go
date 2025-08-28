@@ -3,7 +3,6 @@ package models
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -56,47 +55,75 @@ type Authorization struct {
 	ExpiresAt
 }
 
-var _ bun.BeforeInsertHook = (*Authorization)(nil)
+var _ bun.BeforeAppendModelHook = (*Authorization)(nil)
 
 func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db bun.IDB) errors.OIDCError {
 	if a.UserID == uuid.Nil || !a.IsActive {
 		return nil
 	}
 
-	// TODO: rewrite authorization reference in tokens to new authorization
-
+	var err error
 	var replacedAuthorizations []Authorization
-	err := db.NewSelect().
+	var result sql.Result
+
+	query := db.NewSelect().
 		Model((*Authorization)(nil)).
-		Where("\"authorization\".\"is_active\" = ? AND \"authorization\".\"user_id\" = ? AND \"authorization\".\"client_id\" = ?", true, a.UserID, a.ClientID).
-		Relation("Client").
-		Relation("User").
+		Where("\"authorization\".\"is_active\" = ?", true).
+		Where("\"authorization\".\"user_id\" = ?", a.UserID).
+		Where("\"authorization\".\"client_id\" = ?", a.ClientID).
 		Order("created_at DESC").
-		Scan(ctx, &replacedAuthorizations)
+		Column("authorization_id")
+
+	_, err = db.NewUpdate().
+		With("_auth", query).
+		Model((*Token)(nil)).
+		TableExpr("_auth").
+		Where("\"token\".\"is_active\" = ?", true).
+		Where("\"token\".\"authorization_id\" = \"_auth\".\"authorization_id\"").
+		Set("is_active = ?", false).
+		Set("revoked_at = ?", time.Now().UTC()).
+		Set("revocation_reason = ?", "revoked by new authorization grant").
+		Exec(ctx)
 
 	if err != nil {
-		log.Printf("Error retrieving authorization: %v", err)
+		log.Printf("Failed to revoke tokens from previous authorizations: %v", err)
 		return errors.OIDCErrorResponse{
 			ErrorCode:   errors.SERVER_ERROR,
 			RedirectURI: a.RedirectURI,
 		}
 	}
 
-	if len(replacedAuthorizations) == 0 {
-		return nil
+	result, err = db.NewUpdate().
+		With("_auth", query).
+		Model((*Authorization)(nil)).
+		TableExpr("_auth").
+		Where("\"authorization\".\"authorization_id\" = \"_auth\".\"authorization_id\"").
+		Set("is_active = ?", false).
+		Set("revoked_at = ?", time.Now().UTC()).
+		Set("expires_at = ?", time.Now().UTC().Add(time.Hour*24*30)). // Set expiration to 30 days from now
+		Returning("*").
+		OmitZero().
+		Exec(ctx, &replacedAuthorizations)
+
+	if err != nil {
+		log.Printf("Failed to revoke previous authorizations: %v", err)
+		return errors.OIDCErrorResponse{
+			ErrorCode:   errors.SERVER_ERROR,
+			RedirectURI: a.RedirectURI,
+		}
 	}
 
-	for _, replacedAuth := range replacedAuthorizations {
-		replacedAuth.IsActive = false
-		replacedAuth.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Hour * 24 * 30)
-
-		if err := replacedAuth.Save(ctx, db); err != nil {
-			log.Printf("Error deactivating previous authorization %v: %v", replacedAuth.ID, err)
-			return errors.OIDCErrorResponse{
-				ErrorCode:   errors.SERVER_ERROR,
-				RedirectURI: a.RedirectURI,
-			}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected: %v", err)
+		return errors.OIDCErrorResponse{
+			ErrorCode:   errors.SERVER_ERROR,
+			RedirectURI: a.RedirectURI,
 		}
+	}
+
+	if rowsAffected == 0 {
+		return nil
 	}
 
 	a.ReplacedID = replacedAuthorizations[0].ID
@@ -105,23 +132,22 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 	return nil
 }
 
-func (a *Authorization) BeforeInsert(ctx context.Context, query *bun.InsertQuery) error {
-	if !a.CreatedAt.CreatedAt.IsZero() {
-		return fmt.Errorf("CreatedAt should not be set before insert, was %v", a.CreatedAt.CreatedAt)
-	}
+func (a *Authorization) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	switch query.(type) {
+	case *bun.InsertQuery:
+		a.CreatedAt.CreatedAt = time.Now()
 
-	if a.ExpiresAt.ExpiresAt.IsZero() {
-		a.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Minute * 10) // Default expiration time of 10 minutes (initial)
+		if a.ExpiresAt.ExpiresAt.IsZero() {
+			a.ExpiresAt.ExpiresAt = time.Now().Add(AUTHORIZATION_CODE_TOKEN_LIFETIME) // Default expiration equals authorization code lifetime
+		}
+	case *bun.UpdateQuery:
+		// No special handling needed for updates at the moment
 	}
 
 	return nil
 }
 
 func (a *Authorization) Save(ctx context.Context, db bun.IDB) errors.OIDCError {
-	if a.ExpiresAt.ExpiresAt.IsZero() {
-		a.ExpiresAt.ExpiresAt = time.Now().UTC().Add(time.Minute * 10) // Default expiration time of 10 minutes (initial)
-	}
-
 	if err := a.Validate(); err != nil {
 		return err
 	}
@@ -197,8 +223,6 @@ func (a *Authorization) Save(ctx context.Context, db bun.IDB) errors.OIDCError {
 			RedirectURI: a.RedirectURI,
 		}
 	}
-
-	// TODO: rewrite authorization reference in tokens to new authorization
 
 	return nil
 }

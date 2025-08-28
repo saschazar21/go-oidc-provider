@@ -259,6 +259,7 @@ CREATE TABLE oidc_tokens (
     expires_at TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ,
     last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
     
     -- Status
     is_active BOOLEAN DEFAULT TRUE,

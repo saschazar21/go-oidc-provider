@@ -57,6 +57,7 @@ type Token struct {
 
 	ConsumedAt *time.Time `json:"-" schema:"-" validate:"omitempty,time-lte-now" bun:"consumed_at"`  // Timestamp when the token was consumed, if applicable (e.g. authorization_code)
 	LastUsedAt *time.Time `json:"-" schema:"-" validate:"omitempty,time-lte-now" bun:"last_used_at"` // Timestamp when the token was last used, if applicable (e.g. access_token)
+	RevokedAt  *time.Time `json:"-" schema:"-" validate:"omitempty,time-lte-now" bun:"revoked_at"`   // Timestamp when the token was revoked, if applicable
 	CreatedAt
 	ExpiresAt
 }
@@ -357,10 +358,12 @@ func revokeTokensByAuthorizationID(ctx context.Context, db bun.IDB, authorizatio
 	var err error
 
 	isActive := false
+	revokedAt := time.Now().UTC()
 
 	token := Token{
 		RevocationReason: reason,
 		IsActive:         &isActive,
+		RevokedAt:        &revokedAt,
 	}
 
 	result, err = db.NewUpdate().
@@ -395,11 +398,13 @@ func revokeTokenByID(ctx context.Context, db bun.IDB, id uuid.UUID, reason *stri
 	var err error
 
 	isActive := false
+	revokedAt := time.Now().UTC()
 
 	token := Token{
 		ID:               id,
 		RevocationReason: reason,
 		IsActive:         &isActive,
+		RevokedAt:        &revokedAt,
 	}
 
 	result, err = db.NewUpdate().
@@ -458,6 +463,7 @@ func GetTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, exclude
 		Model(&token).
 		Where("\"token\".\"token_value\" = ?", hashedValue).
 		Where("\"token\".\"is_active\" = ?", true).
+		Where("\"token\".\"revoked_at\" IS NULL").
 		Where("\"token\".\"expires_at\" > ?", time.Now()).
 		Relation("Authorization", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.
