@@ -20,6 +20,7 @@ const (
 	UNAUTHORIZED_CLIENT        OIDCErrorCode = "unauthorized_client"
 	UNSUPPORTED_GRANT_TYPE     OIDCErrorCode = "unsupported_grant_type"
 	UNSUPPORTED_RESPONSE_TYPE  OIDCErrorCode = "unsupported_response_type"
+	UNSUPPORTED_TOKEN_TYPE     OIDCErrorCode = "unsupported_token_type"
 )
 
 const (

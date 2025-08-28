@@ -33,7 +33,7 @@ type Token struct {
 	Value       utils.HashedString `json:"token,omitempty" schema:"token,omitempty" bun:"token_value,notnull"`                                        // Hashed value of the token for security
 	RedirectURI *string            `json:"redirect_uri,omitempty" schema:"redirect_uri,omitempty" validate:"omitempty,uri,lt=512" bun:"redirect_uri"` // Optional redirect URI associated with the token
 
-	IsActive         bool    `json:"is_active" schema:"-" bun:"is_active,default:true"`                                          // Indicates if the token is active
+	IsActive         *bool   `json:"is_active" schema:"-" bun:"is_active,default:true"`                                          // Indicates if the token is active
 	RevocationReason *string `json:"revocation_reason,omitempty" schema:"-" validate:"omitempty,lt=255" bun:"revocation_reason"` // Optional reason for token revocation
 	RotationCount    *int    `json:"-" schema:"-" validate:"omitempty,gte=0" bun:"rotation_count"`                               // Count of how many times the token has been rotated (if applicable)
 
@@ -352,6 +352,83 @@ func generateTokenValue() (*utils.HashedString, error) {
 	return &hashedToken, nil
 }
 
+func revokeTokensByAuthorizationID(ctx context.Context, db bun.IDB, authorizationID uuid.UUID, reason *string) errors.OIDCError {
+	var result sql.Result
+	var err error
+
+	isActive := false
+
+	token := Token{
+		RevocationReason: reason,
+		IsActive:         &isActive,
+	}
+
+	result, err = db.NewUpdate().
+		Model(&token).
+		Where("\"token\".\"authorization_id\" = ?", authorizationID).
+		Where("\"token\".\"is_active\" = ?", true).
+		Where("\"token\".\"expires_at\" > ?", time.Now()).
+		OmitZero().
+		Exec(ctx)
+
+	if err != nil {
+		log.Printf("Database operation error during token revocation: %v", err)
+		return nil
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected during token revocation: %v", err)
+		return nil
+	}
+
+	if rowsAffected == 0 {
+		log.Println("No active tokens found to revoke for the given authorization ID.")
+		return nil
+	}
+
+	return nil
+}
+
+func revokeTokenByID(ctx context.Context, db bun.IDB, id uuid.UUID, reason *string) errors.OIDCError {
+	var result sql.Result
+	var err error
+
+	isActive := false
+
+	token := Token{
+		ID:               id,
+		RevocationReason: reason,
+		IsActive:         &isActive,
+	}
+
+	result, err = db.NewUpdate().
+		Model(&token).
+		WherePK().
+		Where("\"token\".\"is_active\" = ?", true).
+		Where("\"token\".\"expires_at\" > ?", time.Now()).
+		OmitZero().
+		Exec(ctx)
+
+	if err != nil {
+		log.Printf("Database operation error during token revocation: %v", err)
+		return nil
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected during token revocation: %v", err)
+		return nil
+	}
+
+	if rowsAffected == 0 {
+		log.Println("No active token found to revoke.")
+		return nil
+	}
+
+	return nil
+}
+
 func CreateToken(ctx context.Context, db bun.IDB, tokenType string, obj interface{}) (*Token, errors.OIDCError) {
 	switch tokenType {
 	case string(utils.AUTHORIZATION_CODE_TYPE), string(utils.ACCESS_TOKEN_TYPE), string(utils.REFRESH_TOKEN_TYPE):
@@ -436,4 +513,49 @@ func GetTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, exclude
 	}
 
 	return &token, nil
+}
+
+func RevokeTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, tokenTypeHint *string) errors.OIDCError {
+	if tokenValue == "" {
+		return nil
+	}
+
+	reason := "revoked by client request"
+
+	var err error
+	var retrievedToken Token
+
+	query := db.NewSelect().
+		Model((*Token)(nil)).
+		Where("\"token\".\"token_value\" = ?", utils.HashedString(tokenValue)).
+		Where("\"token\".\"is_active\" = ?", true).
+		Where("\"token\".\"expires_at\" > ?", time.Now()).
+		Column("authorization_id", "token_type", "token_id")
+
+	if tokenTypeHint != nil && *tokenTypeHint != "" {
+		query = query.Where("\"token\".\"token_type\" = ?", *tokenTypeHint)
+	}
+
+	err = query.Scan(ctx, &retrievedToken)
+
+	if err != nil {
+		// Do not reveal whether the token existed or not
+		return nil
+	}
+
+	switch retrievedToken.Type {
+	case utils.REFRESH_TOKEN_TYPE:
+		return revokeTokensByAuthorizationID(ctx, db, *retrievedToken.AuthorizationID, &reason)
+	case utils.ACCESS_TOKEN_TYPE:
+		return revokeTokenByID(ctx, db, retrievedToken.ID, &reason)
+	default:
+		// return error for unsupported token types
+		msg := fmt.Sprintf("Unsupported token type for revocation: %s", retrievedToken.Type)
+		log.Printf("%s", msg)
+		return errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.UNSUPPORTED_TOKEN_TYPE,
+			Description: &msg,
+		}
+	}
 }

@@ -66,9 +66,10 @@ func TestToken(t *testing.T) {
 	pgContainer.Snapshot(ctx, postgres.WithSnapshotName(TOKEN_TEST_INIT))
 
 	type testStruct struct {
-		Name        string
-		CreateToken func(ctx context.Context, db bun.IDB) (*Token, error)
-		WantErr     bool
+		Name            string
+		CreateToken     func(ctx context.Context, db bun.IDB) (*Token, error)
+		WantErr         bool
+		WantRetrieveErr bool
 	}
 
 	tests := []testStruct{
@@ -184,6 +185,107 @@ func TestToken(t *testing.T) {
 			},
 			WantErr: true,
 		},
+		{
+			Name: "Create and Revoke Access Token",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				token, err := CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					return nil, err
+				}
+
+				hint := string(utils.ACCESS_TOKEN_TYPE)
+				err = RevokeTokenByValue(ctx, db, string(token.Value), &hint)
+				if err != nil {
+					return nil, err
+				}
+
+				var retrievedToken Token
+				if err := db.NewSelect().
+					Model((*Token)(nil)).
+					Where("\"token\".\"token_value\" = ?", utils.HashedString(token.Value)).
+					Scan(ctx, &retrievedToken); err != nil {
+					return nil, err
+				}
+
+				assert.False(t, *retrievedToken.IsActive, "Token should be inactive after revocation")
+				assert.NotNil(t, retrievedToken.RevocationReason, "Revocation reason should be set")
+
+				return token, nil
+			},
+			WantErr:         false,
+			WantRetrieveErr: true,
+		},
+		{
+			Name: "Create and Revoke token set",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				accessToken, err := CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					return nil, err
+				}
+				refreshToken, err := CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
+				if err != nil {
+					return nil, err
+				}
+
+				err = RevokeTokenByValue(ctx, db, string(refreshToken.Value), nil)
+				if err != nil {
+					return nil, err
+				}
+
+				var retrievedAccessToken Token
+				if err := db.NewSelect().
+					Model((*Token)(nil)).
+					Where("\"token\".\"token_value\" = ?", utils.HashedString(accessToken.Value)).
+					Scan(ctx, &retrievedAccessToken); err != nil {
+					return nil, err
+				}
+
+				assert.False(t, *retrievedAccessToken.IsActive, "Access token should be inactive after revocation")
+				assert.NotNil(t, retrievedAccessToken.RevocationReason, "Revocation reason should be set for access token")
+
+				var retrievedRefreshToken Token
+				if err := db.NewSelect().
+					Model((*Token)(nil)).
+					Where("\"token\".\"token_value\" = ?", utils.HashedString(refreshToken.Value)).
+					Scan(ctx, &retrievedRefreshToken); err != nil {
+					return nil, err
+				}
+
+				assert.False(t, *retrievedRefreshToken.IsActive, "Refresh token should be inactive after revocation")
+				assert.NotNil(t, retrievedRefreshToken.RevocationReason, "Revocation reason should be set for refresh token")
+
+				return accessToken, nil
+			},
+			WantErr:         false,
+			WantRetrieveErr: true,
+		},
+		{
+			Name: "Create and Revoke Authorization Code Token",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				token, err := CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+				if err != nil {
+					return nil, err
+				}
+				err = RevokeTokenByValue(ctx, db, string(token.Value), nil)
+				if err != nil {
+					return nil, err
+				}
+
+				var retrievedToken Token
+				if err := db.NewSelect().
+					Model((*Token)(nil)).
+					Where("\"token\".\"token_value\" = ?", utils.HashedString(token.Value)).
+					Scan(ctx, &retrievedToken); err != nil {
+					return nil, err
+				}
+
+				assert.False(t, *retrievedToken.IsActive, "Token should be inactive after revocation")
+				assert.NotNil(t, retrievedToken.RevocationReason, "Revocation reason should be set")
+
+				return token, nil
+			},
+			WantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -222,14 +324,15 @@ func TestToken(t *testing.T) {
 				var retrievedToken *Token
 				retrievedToken, err = GetTokenByValue(ctx, db, string(token.Value))
 
-				if err != nil {
+				if (err != nil) != tt.WantRetrieveErr {
 					t.Fatalf("GetTokenByValue() error = %v", err)
 				}
 
-				assert.NotNil(t, retrievedToken, "Expected retrieved token to be non-nil")
-				assert.Equal(t, token.ID, retrievedToken.ID, "Expected retrieved token ID to match")
-				assert.Equal(t, token.Type, retrievedToken.Type, "Expected retrieved token Type to match")
-
+				if !tt.WantRetrieveErr {
+					assert.NotNil(t, retrievedToken, "Expected retrieved token to be non-nil")
+					assert.Equal(t, token.ID, retrievedToken.ID, "Expected retrieved token ID to match")
+					assert.Equal(t, token.Type, retrievedToken.Type, "Expected retrieved token Type to match")
+				}
 			} else {
 				assert.Nil(t, token, "Expected token to be nil on error")
 			}
