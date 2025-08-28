@@ -6,6 +6,7 @@ const (
 	CONSENT_REQUIRED           OIDCErrorCode = "consent_required"
 	INTERACTION_REQUIRED       OIDCErrorCode = "interaction_required"
 	INVALID_CLIENT             OIDCErrorCode = "invalid_client"
+	INVALID_GRANT              OIDCErrorCode = "invalid_grant"
 	INVALID_REQUEST            OIDCErrorCode = "invalid_request"
 	INVALID_REQUEST_OBJECT     OIDCErrorCode = "invalid_request_object"
 	INVALID_REQUEST_URI        OIDCErrorCode = "invalid_request_uri"
@@ -16,6 +17,8 @@ const (
 	REQUEST_URI_NOT_SUPPORTED  OIDCErrorCode = "request_uri_not_supported"
 	SERVER_ERROR               OIDCErrorCode = "server_error"
 	TEMPORARILY_UNAVAILABLE    OIDCErrorCode = "temporarily_unavailable"
+	UNAUTHORIZED_CLIENT        OIDCErrorCode = "unauthorized_client"
+	UNSUPPORTED_GRANT_TYPE     OIDCErrorCode = "unsupported_grant_type"
 	UNSUPPORTED_RESPONSE_TYPE  OIDCErrorCode = "unsupported_response_type"
 )
 

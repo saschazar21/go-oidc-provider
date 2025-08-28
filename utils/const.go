@@ -92,4 +92,5 @@ const (
 	ACCESS_TOKEN_TYPE       TokenType = "access_token"
 	REFRESH_TOKEN_TYPE      TokenType = "refresh_token"
 	CLIENT_CREDENTIALS_TYPE TokenType = "client_credentials"
+	CUSTOM_TOKEN_TYPE       string    = "custom_token"
 )

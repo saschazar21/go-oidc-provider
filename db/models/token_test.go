@@ -73,9 +73,23 @@ func TestToken(t *testing.T) {
 
 	tests := []testStruct{
 		{
-			Name: "Create Standard Token",
+			Name: "Create Access Token",
 			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
-				return CreateToken(ctx, db, utils.ACCESS_TOKEN_TYPE, &authorization)
+				return CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+			},
+			WantErr: false,
+		},
+		{
+			Name: "Create Refresh Token",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
+			},
+			WantErr: false,
+		},
+		{
+			Name: "Create Authorization Code Token",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
 			},
 			WantErr: false,
 		},
@@ -89,7 +103,7 @@ func TestToken(t *testing.T) {
 					Description: &msg,
 					Scope:       &scope,
 				}
-				return CreateCustomToken(ctx, db, customToken)
+				return CreateToken(ctx, db, utils.CUSTOM_TOKEN_TYPE, customToken)
 			},
 			WantErr: false,
 		},
@@ -103,7 +117,7 @@ func TestToken(t *testing.T) {
 					Description: &msg,
 					Scope:       &scope,
 				}
-				return CreateCustomToken(ctx, db, customToken)
+				return CreateToken(ctx, db, utils.CUSTOM_TOKEN_TYPE, customToken)
 			},
 			WantErr: false,
 		},
@@ -116,16 +130,59 @@ func TestToken(t *testing.T) {
 					Description: &msg,
 					Scope:       &scope,
 				}
-				return CreateCustomToken(ctx, db, customToken)
+				return CreateToken(ctx, db, utils.CUSTOM_TOKEN_TYPE, customToken)
 			},
 			WantErr: true,
 		},
 		{
 			Name: "Create Client Credentials Token",
 			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
-				return CreateClientCredentialsToken(ctx, db, &client)
+				return CreateToken(ctx, db, string(utils.CLIENT_CREDENTIALS_TYPE), &client)
 			},
 			WantErr: false,
+		},
+		{
+			Name: "Create Token with Invalid Type",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, "invalid_type", &authorization)
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Create Token with Nil Authorization",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), nil)
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Create Client Credentials Token with Nil Client",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.CLIENT_CREDENTIALS_TYPE), nil)
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Create Custom Token with Nil Token",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				var token *Token
+				return CreateToken(ctx, db, utils.CUSTOM_TOKEN_TYPE, token)
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Create Custom Token with User",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, utils.CUSTOM_TOKEN_TYPE, &user)
+			},
+			WantErr: false,
+		},
+		{
+			Name: "Create Custom Token with Client",
+			CreateToken: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, utils.CUSTOM_TOKEN_TYPE, &client)
+			},
+			WantErr: true,
 		},
 	}
 

@@ -15,14 +15,22 @@ import (
 	"github.com/uptrace/bun"
 )
 
-const TOKEN_DEFAULT_RANDOM_LENGTH = 24
+const (
+	TOKEN_DEFAULT_RANDOM_LENGTH = 24
+
+	AUTHORIZATION_CODE_TOKEN_LIFETIME = 5 * time.Minute
+	ACCESS_TOKEN_LIFETIME             = 10 * time.Minute
+	REFRESH_TOKEN_LIFETIME            = 30 * 24 * time.Hour // 30 days
+	CLIENT_CREDENTIALS_TOKEN_LIFETIME = 5 * time.Minute
+	CUSTOM_TOKEN_LIFETIME             = 24 * time.Hour // 24 hours
+)
 
 type Token struct {
 	bun.BaseModel `bun:"oidc_tokens"`
 
 	ID          uuid.UUID          `json:"-" schema:"-" bun:"token_id,pk,type:uuid,default:gen_random_uuid()"`                                        // Unique identifier for the token
 	Type        utils.TokenType    `json:"type" schema:"type,required" validate:"required,token-type" bun:"token_type,notnull"`                       // Type of the token (e.g., access token, refresh token)
-	Value       utils.HashedString `json:"token,omitempty" schema:"token,omitempty" validate:"required_without=ID" bun:"token_value,notnull"`         // Hashed value of the token for security
+	Value       utils.HashedString `json:"token,omitempty" schema:"token,omitempty" bun:"token_value,notnull"`                                        // Hashed value of the token for security
 	RedirectURI *string            `json:"redirect_uri,omitempty" schema:"redirect_uri,omitempty" validate:"omitempty,uri,lt=512" bun:"redirect_uri"` // Optional redirect URI associated with the token
 
 	IsActive         bool    `json:"is_active" schema:"-" bun:"is_active,default:true"`                                          // Indicates if the token is active
@@ -56,6 +64,7 @@ type Token struct {
 var _ bun.BeforeAppendModelHook = (*Token)(nil)
 
 func (m *Token) save(ctx context.Context, db bun.IDB, excludeColumns ...string) errors.OIDCError {
+	var hashedValue *utils.HashedString
 	redirectUri := ""
 
 	if m.RedirectURI != nil {
@@ -89,12 +98,26 @@ func (m *Token) save(ctx context.Context, db bun.IDB, excludeColumns ...string) 
 			Returning("*").
 			Exec(ctx)
 	} else {
+		hashedValue, err = generateTokenValue()
+		if err != nil {
+			description := "Failed to generate token value."
+
+			return errors.HTTPErrorResponse{
+				StatusCode:  http.StatusInternalServerError,
+				Message:     errors.INTERNAL_SERVER_ERROR,
+				Description: description,
+			}
+		}
+
+		m.Value = *hashedValue // Set the unhashed token value only on creation
+
 		result, err = db.NewInsert().
 			Model(m).
-			Returning("*").
 			ExcludeColumn(excludeColumns...).
 			Returning("*").
 			Exec(ctx)
+
+		m.Value = *hashedValue // Return the unhashed token value only on creation
 	}
 
 	defaultMsg := "Failed to store token in database"
@@ -137,8 +160,7 @@ func (m *Token) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 		m.CreatedAt.CreatedAt = time.Now().UTC()
 
 		if m.ExpiresAt.ExpiresAt.IsZero() {
-			// Set default expiration to 5 minutes if not set
-			m.ExpiresAt.ExpiresAt = time.Now().UTC().Add(5 * time.Minute)
+			m.ExpiresAt.ExpiresAt = time.Now().UTC().Add(CLIENT_CREDENTIALS_TOKEN_LIFETIME)
 		}
 	case *bun.UpdateQuery:
 		m.Type = ""
@@ -165,6 +187,155 @@ func (t *Token) GenerateTokenHash() (string, error) {
 	return enc, nil
 }
 
+func createClientCredentialsToken(ctx context.Context, db bun.IDB, rawClient interface{}) (*Token, errors.OIDCError) {
+	var client *Client
+	switch v := rawClient.(type) {
+	case *Client:
+		client = v
+	case Client:
+		client = &v
+	default:
+		msg := "Invalid client type provided."
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
+		}
+	}
+
+	token := Token{
+		Type:     utils.CLIENT_CREDENTIALS_TYPE,
+		ClientID: &client.ID,
+		ExpiresAt: ExpiresAt{
+			ExpiresAt: time.Now().UTC().Add(CLIENT_CREDENTIALS_TOKEN_LIFETIME), // Default expiration to 5 minutes
+		},
+	}
+
+	if err := token.save(ctx, db); err != nil {
+		return nil, err
+	}
+
+	return &token, nil
+}
+
+func createCustomToken(ctx context.Context, db bun.IDB, rawCustomToken interface{}) (*Token, errors.OIDCError) {
+	var token *Token
+	var user *User
+	switch v := rawCustomToken.(type) {
+	case *Token:
+		token = v
+	case Token:
+		token = &v
+	case *User:
+		user = v
+	case User:
+		user = &v
+	default:
+		msg := "Invalid custom token or user type provided."
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
+		}
+	}
+
+	if token == nil && user == nil {
+		msg := "Either a custom token or user must be provided."
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
+		}
+	}
+
+	if token == nil {
+		token = &Token{
+			UserID: &user.ID,
+			Scope:  &[]utils.Scope{utils.OPENID},
+		}
+	}
+
+	if token.UserID == nil || *token.UserID == uuid.Nil {
+		if token.User == nil {
+			msg := "User is required to create a custom token."
+			log.Printf("%s", msg)
+
+			return nil, errors.JSONError{
+				StatusCode:  http.StatusBadRequest,
+				ErrorCode:   errors.INVALID_REQUEST,
+				Description: &msg,
+			}
+		}
+		token.UserID = &token.User.ID
+	}
+
+	if token.ExpiresAt.ExpiresAt.IsZero() {
+		token.ExpiresAt.ExpiresAt = time.Now().UTC().Add(CUSTOM_TOKEN_LIFETIME)
+	}
+
+	t := &Token{
+		Type:        utils.ACCESS_TOKEN_TYPE,
+		IsCustom:    true,
+		UserID:      token.UserID,
+		Description: token.Description,
+		Scope:       token.Scope,
+		ExpiresAt:   token.ExpiresAt,
+	}
+
+	if err := t.save(ctx, db); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, rawAuth interface{}) (*Token, errors.OIDCError) {
+	var authorization *Authorization
+	switch v := rawAuth.(type) {
+	case *Authorization:
+		authorization = v
+	case Authorization:
+		authorization = &v
+	default:
+		msg := "Invalid authorization type provided."
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
+		}
+	}
+
+	token := Token{
+		Type:            tokenType,
+		AuthorizationID: &authorization.ID,
+	}
+
+	switch tokenType {
+	case utils.AUTHORIZATION_CODE_TYPE:
+		token.RedirectURI = &authorization.RedirectURI
+		token.ExpiresAt = ExpiresAt{
+			ExpiresAt: time.Now().UTC().Add(AUTHORIZATION_CODE_TOKEN_LIFETIME), // Default expiration to 5 minutes
+		}
+	case utils.ACCESS_TOKEN_TYPE:
+		token.ExpiresAt = ExpiresAt{
+			ExpiresAt: time.Now().UTC().Add(ACCESS_TOKEN_LIFETIME), // Default expiration to 5 minutes
+		}
+	case utils.REFRESH_TOKEN_TYPE:
+		token.ExpiresAt = ExpiresAt{
+			ExpiresAt: time.Now().UTC().Add(REFRESH_TOKEN_LIFETIME), // Default expiration to 30 days
+		}
+	}
+
+	if err := token.save(ctx, db); err != nil {
+		return nil, err
+	}
+
+	return &token, nil
+}
+
 func generateTokenValue() (*utils.HashedString, error) {
 	tokenValue, err := utils.RandomBase58String(TOKEN_DEFAULT_RANDOM_LENGTH)
 	if err != nil {
@@ -181,128 +352,23 @@ func generateTokenValue() (*utils.HashedString, error) {
 	return &hashedToken, nil
 }
 
-func CreateToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, authorization *Authorization) (*Token, errors.OIDCError) {
-	token := Token{
-		Type:            tokenType,
-		AuthorizationID: &authorization.ID,
-	}
-
-	hashedValue, err := generateTokenValue()
-	if err != nil {
-		description := "Failed to generate token value."
-
-		return nil, errors.OIDCErrorResponse{
-			ErrorCode:        errors.SERVER_ERROR,
-			ErrorDescription: &description,
-			RedirectURI:      authorization.RedirectURI,
-		}
-	}
-
-	token.Value = *hashedValue // Set the unhashed token value only on creation
-
-	if err := token.save(ctx, db); err != nil {
-		return nil, err
-	}
-
-	token.Value = *hashedValue // Return the unhashed token value only on creation
-
-	return &token, nil
-}
-
-func CreateClientCredentialsToken(ctx context.Context, db bun.IDB, client *Client) (*Token, errors.OIDCError) {
-	if client == nil || client.ID == "" {
-		msg := "Client ID is required to create a client credentials token."
+func CreateToken(ctx context.Context, db bun.IDB, tokenType string, obj interface{}) (*Token, errors.OIDCError) {
+	switch tokenType {
+	case string(utils.AUTHORIZATION_CODE_TYPE), string(utils.ACCESS_TOKEN_TYPE), string(utils.REFRESH_TOKEN_TYPE):
+		return createToken(ctx, db, utils.TokenType(tokenType), obj)
+	case string(utils.CLIENT_CREDENTIALS_TYPE):
+		return createClientCredentialsToken(ctx, db, obj)
+	case utils.CUSTOM_TOKEN_TYPE:
+		return createCustomToken(ctx, db, obj)
+	default:
+		msg := fmt.Sprintf("Unsupported token type: %s", tokenType)
 		log.Printf("%s", msg)
-
-		return nil, errors.JSONAPIError{
-			StatusCode: http.StatusBadRequest,
-			Title:      errors.BAD_REQUEST,
-			Detail:     msg,
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
 		}
 	}
-
-	token := Token{
-		Type:     utils.CLIENT_CREDENTIALS_TYPE,
-		ClientID: &client.ID,
-		ExpiresAt: ExpiresAt{
-			ExpiresAt: time.Now().UTC().Add(5 * time.Minute), // Default expiration to 5 minutes
-		},
-	}
-
-	hashedValue, err := generateTokenValue()
-	if err != nil {
-		description := "Failed to generate token value."
-
-		return nil, errors.JSONAPIError{
-			StatusCode: http.StatusInternalServerError,
-			Title:      errors.INTERNAL_SERVER_ERROR,
-			Detail:     description,
-		}
-	}
-
-	token.Value = *hashedValue // Set the unhashed token value only on creation
-
-	if err := token.save(ctx, db); err != nil {
-		return nil, err
-	}
-
-	token.Value = *hashedValue // Return the unhashed token value only on creation
-
-	return &token, nil
-}
-
-func CreateCustomToken(ctx context.Context, db bun.IDB, token *Token) (*Token, errors.OIDCError) {
-	if token.User == nil && (token.UserID == nil || *token.UserID == uuid.Nil) {
-		msg := "User is required to create a custom token."
-		log.Printf("%s", msg)
-
-		return nil, errors.JSONAPIError{
-			StatusCode: http.StatusBadRequest,
-			Title:      errors.BAD_REQUEST,
-			Detail:     msg,
-		}
-	}
-
-	userID := token.UserID
-	if userID == nil || *userID == uuid.Nil {
-		userID = &token.User.ID
-	}
-
-	expiresAt := token.ExpiresAt
-	if expiresAt.ExpiresAt.IsZero() {
-		// Set default expiration to 24 hours if not set
-		expiresAt.ExpiresAt = time.Now().UTC().Add(24 * time.Hour)
-	}
-
-	t := Token{
-		Type:        utils.ACCESS_TOKEN_TYPE,
-		IsCustom:    true,
-		UserID:      userID,
-		Description: token.Description,
-		Scope:       token.Scope,
-		ExpiresAt:   expiresAt,
-	}
-
-	hashedValue, err := generateTokenValue()
-	if err != nil {
-		description := "Failed to generate token value."
-
-		return nil, errors.JSONAPIError{
-			StatusCode: http.StatusInternalServerError,
-			Title:      errors.INTERNAL_SERVER_ERROR,
-			Detail:     description,
-		}
-	}
-
-	t.Value = *hashedValue // Set the unhashed token value only on creation
-
-	if err := t.save(ctx, db); err != nil {
-		return nil, err
-	}
-
-	t.Value = *hashedValue // Return the unhashed token value only on creation
-
-	return &t, nil
 }
 
 func GetTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, excludeColumns ...string) (*Token, errors.OIDCError) {
