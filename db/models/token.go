@@ -309,6 +309,11 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 		}
 	}
 
+	var client *Client
+	if authorization.Client != nil {
+		client = authorization.Client
+	}
+
 	token := Token{
 		Type:            tokenType,
 		AuthorizationID: &authorization.ID,
@@ -321,17 +326,48 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 			ExpiresAt: time.Now().UTC().Add(AUTHORIZATION_CODE_TOKEN_LIFETIME), // Default expiration to 5 minutes
 		}
 	case utils.ACCESS_TOKEN_TYPE:
+		lifetime := ACCESS_TOKEN_LIFETIME // Default expiration to 5 minutes
+		if client != nil && client.AccessTokenLifetime > 0 {
+			lifetime = time.Duration(client.AccessTokenLifetime) * time.Second
+		}
 		token.ExpiresAt = ExpiresAt{
-			ExpiresAt: time.Now().UTC().Add(ACCESS_TOKEN_LIFETIME), // Default expiration to 5 minutes
+			ExpiresAt: time.Now().UTC().Add(lifetime),
 		}
 	case utils.REFRESH_TOKEN_TYPE:
+		lifetime := REFRESH_TOKEN_LIFETIME // Default expiration to 30 days
+		if client != nil && client.AccessTokenLifetime > 0 {
+			lifetime = time.Duration(client.RefreshTokenLifetime) * time.Second
+		}
 		token.ExpiresAt = ExpiresAt{
-			ExpiresAt: time.Now().UTC().Add(REFRESH_TOKEN_LIFETIME), // Default expiration to 30 days
+			ExpiresAt: time.Now().UTC().Add(lifetime),
 		}
 	}
 
 	if err := token.save(ctx, db); err != nil {
 		return nil, err
+	}
+
+	authorization = &Authorization{
+		ID: authorization.ID,
+	}
+
+	var err error
+	_, err = db.NewUpdate().
+		Model(authorization).
+		WherePK().
+		Where("expires_at < ?", token.ExpiresAt.ExpiresAt).
+		Set("expires_at = ?", token.ExpiresAt.ExpiresAt).
+		OmitZero().
+		Exec(ctx)
+
+	if err != nil {
+		log.Printf("Database operation error updating authorization expiration: %v", err)
+		msg := "Failed to update authorization expiration."
+		return nil, errors.OIDCErrorResponse{
+			ErrorCode:        errors.SERVER_ERROR,
+			ErrorDescription: &msg,
+			RedirectURI:      authorization.RedirectURI,
+		}
 	}
 
 	return &token, nil
@@ -345,10 +381,6 @@ func generateTokenValue() (*utils.HashedString, error) {
 	}
 
 	hashedToken := utils.HashedString(tokenValue)
-	if err != nil {
-		log.Printf("Error hashing token value: %v", err)
-		return nil, fmt.Errorf("failed to generate token value")
-	}
 
 	return &hashedToken, nil
 }
@@ -564,4 +596,151 @@ func RevokeTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, toke
 			Description: &msg,
 		}
 	}
+}
+
+func RotateToken(ctx context.Context, db bun.IDB, tr *TokenRequest) (map[utils.TokenType]*Token, errors.OIDCError) {
+	if err := tr.Validate(); err != nil {
+		log.Printf("Validation error: %v", err)
+		msg := "Request contained invalid parameters."
+
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
+		}
+	}
+
+	if tr.GrantType != utils.REFRESH_TOKEN || tr.RefreshToken == nil {
+		msg := fmt.Sprintf("Unsupported grant_type for token rotation: %s", tr.GrantType)
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.UNSUPPORTED_GRANT_TYPE,
+			Description: &msg,
+		}
+	}
+
+	excludeColumns := []string{"token_value"}
+
+	var currentToken Token
+	err := db.NewSelect().
+		Model(&currentToken).
+		Where("\"token\".\"token_type\" = ?", utils.REFRESH_TOKEN_TYPE).
+		Where("\"token\".\"token_value\" = ?", utils.HashedString(*tr.RefreshToken)).
+		Where("\"token\".\"is_active\" = ?", true).
+		Where("\"token\".\"revoked_at\" IS NULL").
+		Where("\"token\".\"expires_at\" > ?", time.Now()).
+		Relation("Authorization", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			excludeColumns := []string{"created_at", "expires_at"}
+
+			query := sq.
+				Where("\"token\".\"authorization_id\" IS NOT NULL").
+				Where("\"authorization\".\"status\" = ?", "approved").
+				Where("\"authorization\".\"is_active\" = ?", true).
+				Where("\"authorization\".\"expires_at\" > ?", time.Now()).
+				ExcludeColumn(excludeColumns...)
+
+			if tr.CodeVerifier != nil && *tr.CodeVerifier != "" {
+				query = query.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+					return sq.
+						Where("\"authorization\".\"code_challenge\" = ?", utils.GeneratePKCEChallenge(*tr.CodeVerifier)). // S256 method
+						WhereOr("\"authorization\".\"code_challenge\" = ?", *tr.CodeVerifier)                             // plain method
+				})
+			}
+
+			return query
+		}).
+		Relation("Authorization.Client", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			query := sq.
+				Where("\"authorization\".\"client_id\" IS NOT NULL").
+				Where("\"authorization__client\".\"is_active\" = ?", true).
+				ExcludeColumn("client_secret")
+
+			if tr.ClientSecret != nil && *tr.ClientSecret != "" {
+				query = query.Where("\"authorization__client\".\"client_secret\" = ?", utils.HashedString(*tr.ClientSecret))
+			}
+
+			return query
+		}).
+		Relation("Authorization.User", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				Where("\"authorization\".\"user_id\" IS NOT NULL").
+				Where("\"authorization__user\".\"is_active\" = ?", true).
+				Where("\"authorization__user\".\"is_locked\" = ?", false).
+				ExcludeColumn("email_hash")
+		}).
+		ExcludeColumn(excludeColumns...).
+		Scan(ctx)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.JSONAPIError{
+				StatusCode: http.StatusNotFound,
+				Title:      errors.NOT_FOUND,
+				Detail:     "Token not found or inactive.",
+			}
+		}
+
+		log.Printf("Error retrieving token by value for rotation: %v", err)
+		return nil, errors.JSONAPIError{
+			StatusCode: http.StatusInternalServerError,
+			Title:      errors.INTERNAL_SERVER_ERROR,
+			Detail:     "Failed to retrieve token from database.",
+		}
+	}
+
+	auth := currentToken.Authorization
+	if auth == nil {
+		msg := "Authorization associated with the token not found."
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+
+	auth.ReplacedID = auth.ID
+	auth.ID = uuid.Nil // prevent accidental updates
+
+	if err := auth.Save(ctx, db); err != nil {
+		log.Printf("Error creating authorization during token rotation: %v", err)
+		msg := "Failed to update authorization during token rotation."
+
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+
+	tokens := make(map[utils.TokenType]*Token)
+
+	// Create new refresh token
+	newRefreshToken, err := createToken(ctx, db, utils.REFRESH_TOKEN_TYPE, auth)
+	if err != nil {
+		log.Printf("Error creating new refresh token during rotation: %v", err)
+		msg := "Failed to create new refresh token during rotation."
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+	tokens[utils.REFRESH_TOKEN_TYPE] = newRefreshToken
+
+	// Create new access token
+	newAccessToken, err := createToken(ctx, db, utils.ACCESS_TOKEN_TYPE, auth)
+	if err != nil {
+		log.Printf("Error creating new access token during rotation: %v", err)
+		msg := "Failed to create new access token during rotation."
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+	tokens[utils.ACCESS_TOKEN_TYPE] = newAccessToken
+
+	return tokens, nil
 }

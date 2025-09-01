@@ -248,6 +248,12 @@ func (t *Token) Validate() (err error) {
 	return
 }
 
+func (tr *TokenRequest) Validate() (err error) {
+	err = utils.NewCustomValidator().Struct(tr)
+
+	return
+}
+
 func (u *User) Validate() error {
 	if err := utils.NewCustomValidator().Struct(u); err != nil {
 		return err

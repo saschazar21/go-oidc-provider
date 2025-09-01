@@ -268,7 +268,8 @@ func GetClientByIDAndSecret(ctx context.Context, db bun.IDB, id string, secret s
 	err := db.NewSelect().
 		Model(client).
 		ExcludeColumn("client_secret").
-		Where("client.client_id = ? AND client.client_secret = ?", id, client.Secret).
+		Where("client.client_id = ?", id).
+		Where("client.client_secret = ?", client.Secret).
 		Scan(ctx, client)
 
 	if err != nil {
