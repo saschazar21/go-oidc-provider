@@ -534,6 +534,20 @@ func TestRotateToken(t *testing.T) {
 				assert.NotNil(t, tokens, "Expected tokens to be non-nil")
 				assert.NotNil(t, tokens[utils.ACCESS_TOKEN_TYPE], "Expected AccessToken to be set")
 				assert.NotNil(t, tokens[utils.REFRESH_TOKEN_TYPE], "Expected RefreshToken to be set")
+				assert.NotEqual(t, authorization.ID, tokens[utils.ACCESS_TOKEN_TYPE].AuthorizationID, "Expected new AccessToken to have different AuthorizationID")
+
+				authorization := Authorization{
+					ID: *tokens[utils.ACCESS_TOKEN_TYPE].AuthorizationID,
+				}
+				err := db.NewSelect().
+					Model(&authorization).
+					WherePK().
+					Relation("ReplacedAuthorization").
+					Scan(ctx)
+				if err != nil {
+					t.Fatalf("Failed to retrieve new authorization: %v", err)
+				}
+				assert.NotNil(t, authorization.ReplacedAuthorization, "Expected new Authorization to have ReplacedAuthorization set")
 			} else {
 				assert.Nil(t, tokens, "Expected tokens to be nil on error")
 			}

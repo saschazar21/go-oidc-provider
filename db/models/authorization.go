@@ -41,7 +41,7 @@ type Authorization struct {
 	User   *User     `json:"user" schema:"-" bun:"rel:has-one,join:user_id=user_id"` // User associated with the authorization
 
 	ReplacedID            uuid.UUID      `json:"-" schema:"-" bun:"replaced_id,type:uuid,nullzero"`
-	ReplacedAuthorization *Authorization `json:"replaced_authorization" schema:"-" bun:"rel:has-one,join:authorization_id=replaced_id"`
+	ReplacedAuthorization *Authorization `json:"replaced_authorization" schema:"-" bun:"rel:has-one,join:replaced_id=authorization_id"`
 
 	// Additional request parameters for the authorization
 	ClientSecret *string `json:"-" schema:"client_secret" bun:"-"`                                     // Optional client secret for the authorization, if applicable
