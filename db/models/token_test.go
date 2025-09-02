@@ -340,6 +340,254 @@ func TestToken(t *testing.T) {
 	}
 }
 
+func TestExchangeToken(t *testing.T) {
+	t.Setenv(test.ROOT_DIR_ENV, "../../")
+
+	ctx := context.Background()
+
+	pgContainer, err := test.CreateContainer(t, ctx)
+	if err != nil {
+		t.Fatalf("Failed to create container: %v", err)
+	}
+
+	// Terminate the container after tests
+	defer test.TerminateContainer(t, ctx, pgContainer)
+
+	conn := db.Connect(ctx)
+
+	var user User
+	if err := loadFixture("user.json", &user); err != nil {
+		t.Fatalf("Failed to create user from file: %v", err)
+	}
+
+	var client Client
+	if err := loadFixture("client_minimal.json", &client); err != nil {
+		t.Fatalf("Failed to create client from file: %v", err)
+	}
+
+	if err := user.Save(ctx, conn); err != nil {
+		t.Fatalf("Failed to save user: %v", err)
+	}
+
+	isConfidential := true
+
+	client.OwnerID = user.ID
+	client.IsConfidential = &isConfidential
+	if err := client.Save(ctx, conn); err != nil {
+		t.Fatalf("Failed to save client: %v", err)
+	}
+
+	var authorization Authorization
+	if err := loadFixture("authorization_approved.json", &authorization); err != nil {
+		t.Fatalf("Failed to load fixture: %v", err)
+	}
+
+	authorization.UserID = user.ID
+	authorization.User = &user
+	authorization.ClientID = client.ID
+	authorization.Client = &client
+	if err := authorization.Save(ctx, conn); err != nil {
+		t.Fatalf("Failed to save authorization: %v", err)
+	}
+
+	conn.Close()
+	pgContainer.Snapshot(ctx, postgres.WithSnapshotName(TOKEN_TEST_INIT))
+
+	type testStruct struct {
+		Name             string
+		PreHook          func(ctx context.Context, db bun.IDB) (*Token, error)
+		Request          tokenRequest
+		WantErr          bool
+		WantRefreshToken bool
+	}
+
+	clientSecret := string(*client.Secret)
+	invalidSecret := "invalid"
+	invalidRedirectURI := "https://invalid.example.com/callback"
+
+	tests := []testStruct{
+		{
+			Name: "Exchange Authorization Code Successfully",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     client.ID,
+				ClientSecret: &clientSecret,
+				Code:         nil, // Will be set in the test
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr: false,
+		},
+		{
+			Name: "Exchange Authorization Code with Refresh Token",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				a := Authorization{
+					ID:    authorization.ID,
+					Scope: append(authorization.Scope, "offline_access"),
+				}
+
+				_, _ = db.NewUpdate().
+					Model(&a).
+					WherePK().
+					OmitZero().
+					Exec(ctx)
+
+				return CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     client.ID,
+				ClientSecret: &clientSecret,
+				Code:         nil, // Will be set in the test
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr:          false,
+			WantRefreshToken: true,
+		},
+		{
+			Name: "Exchange Access Token with Access Token",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     client.ID,
+				ClientSecret: &clientSecret,
+				Code:         nil, // Will be set in the test
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Exchange Authorization Code with Invalid Token",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return &Token{Value: utils.HashedString("invalid")}, nil
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     client.ID,
+				ClientSecret: &clientSecret,
+				Code:         nil, // Will be set in the test,
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Exchange Authorization Code with Missing Client Secret",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType: "authorization_code",
+				ClientID:  client.ID,
+				// ClientSecret is nil
+				Code:        nil, // Will be set in the test
+				RedirectURI: &authorization.RedirectURI,
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Exchange Authorization Code with Invalid Client Secret",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     client.ID,
+				ClientSecret: &invalidSecret,
+				Code:         nil, // Will be set in the test
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Exchange Authorization Code with Missing Client ID",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientSecret: &clientSecret,
+				Code:         nil, // Will be set in the test
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Exchange Authorization Code with Invalid Redirect URI",
+			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
+				return CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     client.ID,
+				ClientSecret: &clientSecret,
+				Code:         nil, // Will be set in the test
+				RedirectURI:  &invalidRedirectURI,
+			},
+			WantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			db := db.Connect(ctx)
+
+			t.Cleanup(func() {
+				if err := db.Close(); err != nil {
+					t.Fatalf("Failed to close connection: %v", err)
+				}
+
+				pgContainer.Restore(ctx, postgres.WithSnapshotName(TOKEN_TEST_INIT))
+			})
+
+			if db == nil {
+				t.Fatalf("Failed to connect to database")
+			}
+
+			token, err := tt.PreHook(ctx, db)
+			if err != nil {
+				t.Fatalf("PreHook() error = %v", err)
+			}
+			if token == nil {
+				t.Fatalf("PreHook() returned nil token")
+			}
+
+			tt.Request.Code = (*string)(&token.Value)
+
+			tokens, err := ExchangeToken(ctx, db, &tt.Request)
+			if (err != nil) != tt.WantErr {
+				t.Fatalf("ExchangeToken() error = %v, wantErr %v", err, tt.WantErr)
+			}
+
+			if !tt.WantErr {
+				assert.NotEmpty(t, tokens, "Expected tokens to be non-nil")
+				assert.NotNil(t, tokens[utils.ACCESS_TOKEN_TYPE], "Expected access token to be set")
+
+				if tt.WantRefreshToken {
+					assert.NotNil(t, tokens[utils.REFRESH_TOKEN_TYPE], "Expected refresh token to be set")
+				}
+
+				if err := db.NewSelect().
+					Model((*Token)(nil)).
+					Where("\"token\".\"token_value\" = ?", utils.HashedString(token.Value)).
+					Scan(ctx, token); err != nil {
+					t.Fatalf("Failed to retrieve authorization code")
+				}
+
+				assert.NotNil(t, token.ConsumedAt, "Expected authorization code to be marked as consumed")
+				assert.NotNil(t, token.RevocationReason, "Expected authorization code to have revocation reason set")
+				assert.Equal(t, token.ConsumedAt, token.RevokedAt, "Expected authorization code ConsumedAt to match RevokedAt")
+				assert.False(t, *token.IsActive, "Expected authorization code to be inactive after exchange")
+			} else {
+				assert.Nil(t, tokens, "Expected tokens to be nil on error")
+			}
+		})
+	}
+}
+
 func TestRotateToken(t *testing.T) {
 	t.Setenv(test.ROOT_DIR_ENV, "../../")
 
@@ -396,7 +644,7 @@ func TestRotateToken(t *testing.T) {
 	type testStruct struct {
 		Name    string
 		PreHook func(ctx context.Context, db bun.IDB) (*Token, error)
-		Request TokenRequest
+		Request tokenRequest
 		WantErr bool
 	}
 
@@ -409,7 +657,7 @@ func TestRotateToken(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
 				return CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
 			},
-			Request: TokenRequest{
+			Request: tokenRequest{
 				GrantType:    "refresh_token",
 				ClientID:     client.ID,
 				ClientSecret: &clientSecret,
@@ -422,7 +670,7 @@ func TestRotateToken(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
 				return CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 			},
-			Request: TokenRequest{
+			Request: tokenRequest{
 				GrantType:    "refresh_token",
 				ClientID:     client.ID,
 				ClientSecret: &clientSecret,
@@ -435,7 +683,7 @@ func TestRotateToken(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
 				return &Token{Value: utils.HashedString("invalid")}, nil
 			},
-			Request: TokenRequest{
+			Request: tokenRequest{
 				GrantType:    "refresh_token",
 				ClientID:     client.ID,
 				ClientSecret: &clientSecret,
@@ -448,7 +696,7 @@ func TestRotateToken(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
 				return CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
 			},
-			Request: TokenRequest{
+			Request: tokenRequest{
 				GrantType: "refresh_token",
 				ClientID:  client.ID,
 				// ClientSecret is nil
@@ -461,7 +709,7 @@ func TestRotateToken(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
 				return CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
 			},
-			Request: TokenRequest{
+			Request: tokenRequest{
 				GrantType:    "refresh_token",
 				ClientID:     client.ID,
 				ClientSecret: &invalidClientSecret,
@@ -474,7 +722,7 @@ func TestRotateToken(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
 				return CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
 			},
-			Request: TokenRequest{
+			Request: tokenRequest{
 				GrantType:    "refresh_token",
 				ClientSecret: &clientSecret,
 				RefreshToken: nil, // Will be set in the test
@@ -486,7 +734,7 @@ func TestRotateToken(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) (*Token, error) {
 				return CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
 			},
-			Request: TokenRequest{
+			Request: tokenRequest{
 				GrantType:    "refresh_token",
 				ClientID:     client.ID,
 				CodeVerifier: &invalidClientSecret,
@@ -531,7 +779,7 @@ func TestRotateToken(t *testing.T) {
 			}
 
 			if !tt.WantErr {
-				assert.NotNil(t, tokens, "Expected tokens to be non-nil")
+				assert.NotEmpty(t, tokens, "Expected tokens to be non-nil")
 				assert.NotNil(t, tokens[utils.ACCESS_TOKEN_TYPE], "Expected AccessToken to be set")
 				assert.NotNil(t, tokens[utils.REFRESH_TOKEN_TYPE], "Expected RefreshToken to be set")
 				assert.NotEqual(t, authorization.ID, tokens[utils.ACCESS_TOKEN_TYPE].AuthorizationID, "Expected new AccessToken to have different AuthorizationID")

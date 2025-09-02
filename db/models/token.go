@@ -347,6 +347,11 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 		return nil, err
 	}
 
+	expiresAt := time.Now().UTC().Add(AUTHORIZATION_GRANT_LIFETIME)
+	if token.ExpiresAt.ExpiresAt.Before(expiresAt) {
+		expiresAt = token.ExpiresAt.ExpiresAt
+	}
+
 	authorization = &Authorization{
 		ID: authorization.ID,
 	}
@@ -355,8 +360,8 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 	_, err = db.NewUpdate().
 		Model(authorization).
 		WherePK().
-		Where("expires_at < ?", token.ExpiresAt.ExpiresAt).
-		Set("expires_at = ?", token.ExpiresAt.ExpiresAt).
+		Where("expires_at < ?", expiresAt).
+		Set("expires_at = ?", expiresAt).
 		OmitZero().
 		Exec(ctx)
 
@@ -485,7 +490,7 @@ func CreateToken(ctx context.Context, db bun.IDB, tokenType string, obj interfac
 	}
 }
 
-func ExchangeToken(ctx context.Context, db bun.IDB, tr *TokenRequest) (map[utils.TokenType]*Token, errors.OIDCError) {
+func ExchangeToken(ctx context.Context, db bun.IDB, tr *tokenRequest) (map[utils.TokenType]*Token, errors.OIDCError) {
 	if err := tr.Validate(); err != nil {
 		log.Printf("Validation error: %v", err)
 		msg := "Request contained invalid parameters."
@@ -507,7 +512,134 @@ func ExchangeToken(ctx context.Context, db bun.IDB, tr *TokenRequest) (map[utils
 		}
 	}
 
-	return nil, nil
+	var authorizationCode Token
+	var err error
+
+	query := newTokenQuery(db, *tr.Code, string(utils.AUTHORIZATION_CODE_TYPE)).
+		addAuthorization(true, true, "Authorization", "authorization", "token").
+		query
+
+	if tr.ClientSecret != nil && *tr.ClientSecret != "" {
+		query = query.
+			Where("\"authorization__client\".\"client_secret\" = ?", utils.HashedString(*tr.ClientSecret))
+	}
+
+	if tr.CodeVerifier != nil && *tr.CodeVerifier != "" {
+		query = query.
+			Where("\"authorization\".\"code_challenge\" = ?", utils.GeneratePKCEChallenge(*tr.CodeVerifier))
+	}
+
+	err = query.
+		Where("\"token\".\"consumed_at\" IS NULL").
+		Where("\"authorization\".\"redirect_uri\" = ?", tr.RedirectURI).
+		Scan(ctx, &authorizationCode)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.JSONAPIError{
+				StatusCode: http.StatusNotFound,
+				Title:      errors.NOT_FOUND,
+				Detail:     "Authorization Code not found or inactive.",
+			}
+		}
+
+		log.Printf("Error retrieving authorization code token by value: %v", err)
+		msg := "Failed to retrieve authorization code from database."
+		return nil, errors.JSONAPIError{
+			StatusCode: http.StatusInternalServerError,
+			Title:      errors.INTERNAL_SERVER_ERROR,
+			Detail:     msg,
+		}
+	}
+
+	auth := authorizationCode.Authorization
+	if auth == nil {
+		msg := "Authorization associated with the authorization code not found."
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+
+	consumedAt := time.Now().UTC()
+	authorizationCode = Token{
+		ID: authorizationCode.ID,
+	}
+
+	var result sql.Result
+	result, err = db.NewUpdate().
+		Model(&authorizationCode).
+		WherePK().
+		Set("consumed_at = ?", consumedAt).
+		Set("revoked_at = ?", consumedAt).
+		Set("revocation_reason = ?", "consumed during token exchange").
+		Set("is_active = ?", false).
+		OmitZero().
+		Exec(ctx)
+
+	if err != nil {
+		log.Printf("Database operation error marking authorization code as consumed: %v", err)
+		msg := "Failed to mark authorization code as consumed."
+		return nil, errors.OIDCErrorResponse{
+			ErrorCode:        errors.SERVER_ERROR,
+			ErrorDescription: &msg,
+			RedirectURI:      auth.RedirectURI,
+		}
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected when marking authorization code as consumed: %v", err)
+		msg := "Failed to mark authorization code as consumed."
+		return nil, errors.OIDCErrorResponse{
+			ErrorCode:        errors.SERVER_ERROR,
+			ErrorDescription: &msg,
+			RedirectURI:      auth.RedirectURI,
+		}
+	}
+
+	if rowsAffected == 0 {
+		log.Println("No rows affected when marking authorization code as consumed.")
+		msg := "Failed to mark authorization code as consumed."
+		return nil, errors.OIDCErrorResponse{
+			ErrorCode:        errors.SERVER_ERROR,
+			ErrorDescription: &msg,
+			RedirectURI:      auth.RedirectURI,
+		}
+	}
+
+	auth.ReplacedID = auth.ID
+	auth.ID = uuid.Nil // create new authorization entry for tokens
+
+	if err := auth.Save(ctx, db); err != nil {
+		log.Printf("Error creating authorization during token exchange: %v", err)
+		msg := "Failed to create authorization during token exchange."
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+
+	var tokens = make(map[utils.TokenType]*Token)
+
+	accessToken, tokenErr := createToken(ctx, db, utils.ACCESS_TOKEN_TYPE, auth)
+	if tokenErr != nil {
+		return nil, tokenErr
+	}
+	tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+
+	if auth.Scope != nil && utils.ContainsValue(auth.Scope, utils.OFFLINE_ACCESS) {
+		refreshToken, tokenErr := createToken(ctx, db, utils.REFRESH_TOKEN_TYPE, auth)
+		if tokenErr != nil {
+			return nil, tokenErr
+		}
+		tokens[utils.REFRESH_TOKEN_TYPE] = refreshToken
+	}
+
+	return tokens, nil
 }
 
 func GetTokenByValue(ctx context.Context, db bun.IDB, value string, excludeColumns ...string) (*Token, errors.OIDCError) {
@@ -584,7 +716,7 @@ func RevokeTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, toke
 	}
 }
 
-func RotateToken(ctx context.Context, db bun.IDB, tr *TokenRequest) (map[utils.TokenType]*Token, errors.OIDCError) {
+func RotateToken(ctx context.Context, db bun.IDB, tr *tokenRequest) (map[utils.TokenType]*Token, errors.OIDCError) {
 	if err := tr.Validate(); err != nil {
 		log.Printf("Validation error: %v", err)
 		msg := "Request contained invalid parameters."

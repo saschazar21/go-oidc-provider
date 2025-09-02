@@ -248,7 +248,7 @@ func (t *Token) Validate() (err error) {
 	return
 }
 
-func (tr *TokenRequest) Validate() (err error) {
+func (tr *tokenRequest) Validate() (err error) {
 	err = utils.NewCustomValidator().Struct(tr)
 
 	return

@@ -13,6 +13,11 @@ import (
 	"github.com/uptrace/bun"
 )
 
+const (
+	AUTHORIZATION_GRANT_LIFETIME          = time.Hour * 24 * 60 // Lifetime of an authorization grant
+	REPLACED_AUTHORIZATION_GRANT_LIFETIME = time.Hour * 24 * 30 // Lifetime of a replaced authorization grant
+)
+
 type Authorization struct {
 	bun.BaseModel `bun:"table:oidc_authorizations"` // Base model for the authorization table
 
@@ -100,7 +105,7 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 		Where("\"authorization\".\"authorization_id\" = \"_auth\".\"authorization_id\"").
 		Set("is_active = ?", false).
 		Set("revoked_at = ?", time.Now().UTC()).
-		Set("expires_at = ?", time.Now().UTC().Add(time.Hour*24*30)). // Set expiration to 30 days from now
+		Set("expires_at = ?", time.Now().UTC().Add(REPLACED_AUTHORIZATION_GRANT_LIFETIME)). // Set expiration to 30 days from now
 		Returning("*").
 		OmitZero().
 		Exec(ctx, &replacedAuthorizations)
