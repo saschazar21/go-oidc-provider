@@ -485,53 +485,43 @@ func CreateToken(ctx context.Context, db bun.IDB, tokenType string, obj interfac
 	}
 }
 
-func GetTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, excludeColumns ...string) (*Token, errors.OIDCError) {
-	hashedValue := utils.HashedString(tokenValue)
+func ExchangeToken(ctx context.Context, db bun.IDB, tr *TokenRequest) (map[utils.TokenType]*Token, errors.OIDCError) {
+	if err := tr.Validate(); err != nil {
+		log.Printf("Validation error: %v", err)
+		msg := "Request contained invalid parameters."
 
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
+		}
+	}
+
+	if tr.GrantType != utils.AUTHORIZATION_CODE || tr.Code == nil {
+		msg := fmt.Sprintf("Unsupported grant_type for token exchange: %s", tr.GrantType)
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.UNSUPPORTED_GRANT_TYPE,
+			Description: &msg,
+		}
+	}
+
+	return nil, nil
+}
+
+func GetTokenByValue(ctx context.Context, db bun.IDB, value string, excludeColumns ...string) (*Token, errors.OIDCError) {
 	excludeColumns = append(excludeColumns, "token_value")
 
 	var token Token
-	err := db.NewSelect().
-		Model(&token).
-		Where("\"token\".\"token_value\" = ?", hashedValue).
-		Where("\"token\".\"is_active\" = ?", true).
-		Where("\"token\".\"revoked_at\" IS NULL").
-		Where("\"token\".\"expires_at\" > ?", time.Now()).
-		Relation("Authorization", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.
-				WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
-					return sq.
-						Where("\"token\".\"authorization_id\" IS NULL").
-						WhereGroup(" OR ", func(sq *bun.SelectQuery) *bun.SelectQuery {
-							return sq.
-								Where("\"authorization\".\"status\" = ?", "approved").
-								Where("\"authorization\".\"is_active\" = ?", true).
-								Where("\"authorization\".\"expires_at\" > ?", time.Now())
-						})
-				})
-		}).
-		Relation("Client", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.
-				WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
-					return sq.
-						Where("\"token\".\"client_id\" IS NULL").
-						WhereOr("\"client\".\"is_active\" = ?", true)
-				})
-		}).
-		Relation("User", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.
-				WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
-					return sq.
-						Where("\"token\".\"user_id\" IS NULL").
-						WhereGroup(" OR ", func(sq *bun.SelectQuery) *bun.SelectQuery {
-							return sq.
-								Where("\"user\".\"is_active\" = ?", true).
-								Where("\"user\".\"is_locked\" = ?", false)
-						})
-				})
-		}).
+	tokenQuery := newTokenQuery(db, value, "").
+		addAuthorization(false, true, "Authorization", "authorization", "token").
+		addClient(false, "Client", "client", "token").
+		addUser(false, "User", "user", "token")
+
+	err := tokenQuery.query.
 		ExcludeColumn(excludeColumns...).
-		Scan(ctx)
+		Scan(ctx, &token)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -542,11 +532,11 @@ func GetTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, exclude
 			}
 		}
 
-		log.Printf("Error retrieving token by value: %v", err)
+		log.Printf("Database operation error: %v", err)
 		return nil, errors.JSONAPIError{
 			StatusCode: http.StatusInternalServerError,
 			Title:      errors.INTERNAL_SERVER_ERROR,
-			Detail:     "Failed to retrieve token from database.",
+			Detail:     "Database operation resulted in an error.",
 		}
 	}
 
@@ -563,18 +553,14 @@ func RevokeTokenByValue(ctx context.Context, db bun.IDB, tokenValue string, toke
 	var err error
 	var retrievedToken Token
 
-	query := db.NewSelect().
-		Model((*Token)(nil)).
-		Where("\"token\".\"token_value\" = ?", utils.HashedString(tokenValue)).
-		Where("\"token\".\"is_active\" = ?", true).
-		Where("\"token\".\"expires_at\" > ?", time.Now()).
-		Column("authorization_id", "token_type", "token_id")
-
+	tokenType := ""
 	if tokenTypeHint != nil && *tokenTypeHint != "" {
-		query = query.Where("\"token\".\"token_type\" = ?", *tokenTypeHint)
+		tokenType = *tokenTypeHint
 	}
 
-	err = query.Scan(ctx, &retrievedToken)
+	err = newTokenQuery(db, tokenValue, tokenType).query.
+		Column("authorization_id", "token_type", "token_id").
+		Scan(ctx, &retrievedToken)
 
 	if err != nil {
 		// Do not reveal whether the token existed or not
@@ -620,57 +606,22 @@ func RotateToken(ctx context.Context, db bun.IDB, tr *TokenRequest) (map[utils.T
 		}
 	}
 
-	excludeColumns := []string{"token_value"}
-
 	var currentToken Token
-	err := db.NewSelect().
-		Model(&currentToken).
-		Where("\"token\".\"token_type\" = ?", utils.REFRESH_TOKEN_TYPE).
-		Where("\"token\".\"token_value\" = ?", utils.HashedString(*tr.RefreshToken)).
-		Where("\"token\".\"is_active\" = ?", true).
-		Where("\"token\".\"revoked_at\" IS NULL").
-		Where("\"token\".\"expires_at\" > ?", time.Now()).
-		Relation("Authorization", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			excludeColumns := []string{"created_at", "expires_at"}
+	tokenQuery := newTokenQuery(db, *tr.RefreshToken, string(utils.REFRESH_TOKEN_TYPE)).
+		addAuthorization(true, true, "Authorization", "authorization", "token")
 
-			query := sq.
-				Where("\"token\".\"authorization_id\" IS NOT NULL").
-				Where("\"authorization\".\"status\" = ?", "approved").
-				Where("\"authorization\".\"is_active\" = ?", true).
-				Where("\"authorization\".\"expires_at\" > ?", time.Now()).
-				ExcludeColumn(excludeColumns...)
+	if tr.ClientSecret != nil && *tr.ClientSecret != "" {
+		tokenQuery.query = tokenQuery.query.
+			Where("\"authorization__client\".\"client_secret\" = ?", utils.HashedString(*tr.ClientSecret))
+	}
 
-			if tr.CodeVerifier != nil && *tr.CodeVerifier != "" {
-				query = query.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
-					return sq.
-						Where("\"authorization\".\"code_challenge\" = ?", utils.GeneratePKCEChallenge(*tr.CodeVerifier)). // S256 method
-						WhereOr("\"authorization\".\"code_challenge\" = ?", *tr.CodeVerifier)                             // plain method
-				})
-			}
+	if tr.CodeVerifier != nil && *tr.CodeVerifier != "" {
+		tokenQuery.query = tokenQuery.query.
+			Where("\"authorization\".\"code_challenge\" = ?", utils.GeneratePKCEChallenge(*tr.CodeVerifier))
+	}
 
-			return query
-		}).
-		Relation("Authorization.Client", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			query := sq.
-				Where("\"authorization\".\"client_id\" IS NOT NULL").
-				Where("\"authorization__client\".\"is_active\" = ?", true).
-				ExcludeColumn("client_secret")
-
-			if tr.ClientSecret != nil && *tr.ClientSecret != "" {
-				query = query.Where("\"authorization__client\".\"client_secret\" = ?", utils.HashedString(*tr.ClientSecret))
-			}
-
-			return query
-		}).
-		Relation("Authorization.User", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.
-				Where("\"authorization\".\"user_id\" IS NOT NULL").
-				Where("\"authorization__user\".\"is_active\" = ?", true).
-				Where("\"authorization__user\".\"is_locked\" = ?", false).
-				ExcludeColumn("email_hash")
-		}).
-		ExcludeColumn(excludeColumns...).
-		Scan(ctx)
+	err := tokenQuery.query.
+		Scan(ctx, &currentToken)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
