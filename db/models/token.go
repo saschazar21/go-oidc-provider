@@ -25,6 +25,14 @@ const (
 	CUSTOM_TOKEN_LIFETIME             = 24 * time.Hour // 24 hours
 )
 
+const (
+	ACCESS_TOKEN_PREFIX             = "at"
+	AUTHORIZATION_CODE_TOKEN_PREFIX = "ac"
+	REFRESH_TOKEN_PREFIX            = "rt"
+	CLIENT_CREDENTIALS_TOKEN_PREFIX = "cc"
+	CUSTOM_TOKEN_PREFIX             = "ct"
+)
+
 type Token struct {
 	bun.BaseModel `bun:"oidc_tokens"`
 
@@ -62,7 +70,27 @@ type Token struct {
 	ExpiresAt
 }
 
+var _ bun.AfterSelectHook = (*Token)(nil)
 var _ bun.BeforeAppendModelHook = (*Token)(nil)
+
+func (m *Token) prefix() string {
+	if m.IsCustom {
+		return CUSTOM_TOKEN_PREFIX
+	}
+
+	switch m.Type {
+	case utils.AUTHORIZATION_CODE_TYPE:
+		return AUTHORIZATION_CODE_TOKEN_PREFIX
+	case utils.ACCESS_TOKEN_TYPE:
+		return ACCESS_TOKEN_PREFIX
+	case utils.REFRESH_TOKEN_TYPE:
+		return REFRESH_TOKEN_PREFIX
+	case utils.CLIENT_CREDENTIALS_TYPE:
+		return CLIENT_CREDENTIALS_TOKEN_PREFIX
+	default:
+		return ""
+	}
+}
 
 func (m *Token) save(ctx context.Context, db bun.IDB, excludeColumns ...string) errors.OIDCError {
 	var hashedValue *utils.HashedString
@@ -99,7 +127,7 @@ func (m *Token) save(ctx context.Context, db bun.IDB, excludeColumns ...string) 
 			Returning("*").
 			Exec(ctx)
 	} else {
-		hashedValue, err = generateTokenValue()
+		hashedValue, err = generateTokenValue(m.prefix())
 		if err != nil {
 			description := "Failed to generate token value."
 
@@ -150,6 +178,63 @@ func (m *Token) save(ctx context.Context, db bun.IDB, excludeColumns ...string) 
 			ErrorDescription: &defaultMsg,
 			RedirectURI:      redirectUri,
 		}
+	}
+
+	return nil
+}
+
+func (m *Token) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
+	model := query.GetModel().Value()
+
+	t, ok := model.(*Token)
+	if !ok {
+		log.Println("AfterSelect: model is not a Token")
+		return nil
+	}
+
+	if t == nil {
+		log.Println("AfterSelect: Token is nil")
+		msg := "Failed to update token in database."
+		return errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+
+	if t.Value == utils.HashedString("") && t.ID == uuid.Nil {
+		log.Println("AfterSelect: Token ID is nil and/or Value is empty")
+		return nil
+	}
+
+	token := Token{}
+
+	q := query.DB().NewUpdate().
+		Model(&token).
+		Set("last_used_at = ?", time.Now().UTC()).
+		OmitZero()
+
+	if t.ID != uuid.Nil {
+		q = q.Where("\"token\".\"token_id\" = ?", t.ID)
+	} else {
+		q = q.Where("\"token\".\"token_value\" = ?", t.Value)
+	}
+
+	var result sql.Result
+	result, err := q.Exec(ctx)
+
+	if err != nil {
+		log.Printf("Database operation error updating last_used_at: %v", err)
+		msg := "Failed to update token in database."
+		return errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		log.Println("No rows affected when updating last_used_at.")
 	}
 
 	return nil
@@ -378,8 +463,13 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 	return &token, nil
 }
 
-func generateTokenValue() (*utils.HashedString, error) {
-	tokenValue, err := utils.RandomBase58String(TOKEN_DEFAULT_RANDOM_LENGTH)
+func generateTokenValue(prefix ...string) (*utils.HashedString, error) {
+	p := ""
+	if len(prefix) > 0 && prefix[0] != "" {
+		p = prefix[0]
+	}
+
+	tokenValue, err := utils.RandomBase58String(TOKEN_DEFAULT_RANDOM_LENGTH, p)
 	if err != nil {
 		log.Printf("Error generating token value: %v", err)
 		return nil, fmt.Errorf("failed to generate token value")

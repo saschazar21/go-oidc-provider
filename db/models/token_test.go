@@ -199,11 +199,14 @@ func TestToken(t *testing.T) {
 					return nil, err
 				}
 
-				var retrievedToken Token
+				retrievedToken := Token{
+					Value: utils.HashedString(token.Value),
+				}
+
 				if err := db.NewSelect().
-					Model((*Token)(nil)).
+					Model(&retrievedToken).
 					Where("\"token\".\"token_value\" = ?", utils.HashedString(token.Value)).
-					Scan(ctx, &retrievedToken); err != nil {
+					Scan(ctx); err != nil {
 					return nil, err
 				}
 
@@ -232,22 +235,28 @@ func TestToken(t *testing.T) {
 					return nil, err
 				}
 
-				var retrievedAccessToken Token
+				retrievedAccessToken := Token{
+					Value: utils.HashedString(accessToken.Value),
+				}
+
 				if err := db.NewSelect().
-					Model((*Token)(nil)).
+					Model(&retrievedAccessToken).
 					Where("\"token\".\"token_value\" = ?", utils.HashedString(accessToken.Value)).
-					Scan(ctx, &retrievedAccessToken); err != nil {
+					Scan(ctx); err != nil {
 					return nil, err
 				}
 
 				assert.False(t, *retrievedAccessToken.IsActive, "Access token should be inactive after revocation")
 				assert.NotNil(t, retrievedAccessToken.RevocationReason, "Revocation reason should be set for access token")
 
-				var retrievedRefreshToken Token
+				retrievedRefreshToken := Token{
+					Value: utils.HashedString(refreshToken.Value),
+				}
+
 				if err := db.NewSelect().
-					Model((*Token)(nil)).
+					Model(&retrievedRefreshToken).
 					Where("\"token\".\"token_value\" = ?", utils.HashedString(refreshToken.Value)).
-					Scan(ctx, &retrievedRefreshToken); err != nil {
+					Scan(ctx); err != nil {
 					return nil, err
 				}
 
@@ -570,10 +579,14 @@ func TestExchangeToken(t *testing.T) {
 					assert.NotNil(t, tokens[utils.REFRESH_TOKEN_TYPE], "Expected refresh token to be set")
 				}
 
+				token := Token{
+					Value: utils.HashedString(token.Value),
+				}
+
 				if err := db.NewSelect().
-					Model((*Token)(nil)).
+					Model(&token).
 					Where("\"token\".\"token_value\" = ?", utils.HashedString(token.Value)).
-					Scan(ctx, token); err != nil {
+					Scan(ctx); err != nil {
 					t.Fatalf("Failed to retrieve authorization code")
 				}
 

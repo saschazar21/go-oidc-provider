@@ -20,8 +20,12 @@ func newTokenQuery(db bun.IDB, value string, tokenType string) *tokenQuery {
 
 	hashedValue := utils.HashedString(value)
 
+	token := Token{
+		Value: hashedValue, // Needed for AfterSelect hook
+	}
+
 	query := db.NewSelect().
-		Model((*Token)(nil)).
+		Model(&token). // Needed for AfterSelect hook
 		Where("\"token\".\"token_value\" = ?", hashedValue).
 		Where("\"token\".\"is_active\" = ?", true).
 		Where("\"token\".\"revoked_at\" IS NULL").
