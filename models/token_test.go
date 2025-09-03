@@ -15,8 +15,6 @@ import (
 const TOKEN_TEST_INIT = "token_test_init"
 
 func TestToken(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -30,12 +28,12 @@ func TestToken(t *testing.T) {
 	conn := db.Connect(ctx)
 
 	var user User
-	if err := loadFixture("user.json", &user); err != nil {
+	if err := test.LoadFixture("user.json", &user); err != nil {
 		t.Fatalf("Failed to create user from file: %v", err)
 	}
 
 	var client Client
-	if err := loadFixture("client_minimal.json", &client); err != nil {
+	if err := test.LoadFixture("client_minimal.json", &client); err != nil {
 		t.Fatalf("Failed to create client from file: %v", err)
 	}
 
@@ -49,7 +47,7 @@ func TestToken(t *testing.T) {
 	}
 
 	var authorization Authorization
-	if err := loadFixture("authorization_approved.json", &authorization); err != nil {
+	if err := test.LoadFixture("authorization_approved.json", &authorization); err != nil {
 		t.Fatalf("Failed to load fixture: %v", err)
 	}
 
@@ -350,8 +348,6 @@ func TestToken(t *testing.T) {
 }
 
 func TestExchangeToken(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -365,12 +361,12 @@ func TestExchangeToken(t *testing.T) {
 	conn := db.Connect(ctx)
 
 	var user User
-	if err := loadFixture("user.json", &user); err != nil {
+	if err := test.LoadFixture("user.json", &user); err != nil {
 		t.Fatalf("Failed to create user from file: %v", err)
 	}
 
 	var client Client
-	if err := loadFixture("client_minimal.json", &client); err != nil {
+	if err := test.LoadFixture("client_minimal.json", &client); err != nil {
 		t.Fatalf("Failed to create client from file: %v", err)
 	}
 
@@ -387,7 +383,7 @@ func TestExchangeToken(t *testing.T) {
 	}
 
 	var authorization Authorization
-	if err := loadFixture("authorization_approved.json", &authorization); err != nil {
+	if err := test.LoadFixture("authorization_approved.json", &authorization); err != nil {
 		t.Fatalf("Failed to load fixture: %v", err)
 	}
 
@@ -602,8 +598,6 @@ func TestExchangeToken(t *testing.T) {
 }
 
 func TestRotateToken(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -617,12 +611,12 @@ func TestRotateToken(t *testing.T) {
 	conn := db.Connect(ctx)
 
 	var user User
-	if err := loadFixture("user.json", &user); err != nil {
+	if err := test.LoadFixture("user.json", &user); err != nil {
 		t.Fatalf("Failed to create user from file: %v", err)
 	}
 
 	var client Client
-	if err := loadFixture("client_minimal.json", &client); err != nil {
+	if err := test.LoadFixture("client_minimal.json", &client); err != nil {
 		t.Fatalf("Failed to create client from file: %v", err)
 	}
 
@@ -639,7 +633,7 @@ func TestRotateToken(t *testing.T) {
 	}
 
 	var authorization Authorization
-	if err := loadFixture("authorization_approved.json", &authorization); err != nil {
+	if err := test.LoadFixture("authorization_approved.json", &authorization); err != nil {
 		t.Fatalf("Failed to load fixture: %v", err)
 	}
 

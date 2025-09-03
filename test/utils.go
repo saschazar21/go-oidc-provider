@@ -1,4 +1,4 @@
-package models
+package test
 
 import (
 	"encoding/json"
@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 )
 
-func loadFixture(file string, model interface{}) error {
-	data, err := os.ReadFile(filepath.Join("testdata", file))
+func LoadFixture(file string, model interface{}) error {
+	data, err := os.ReadFile(filepath.Join("../test/testdata", file))
 	if err != nil {
 		return err
 	}

@@ -2,9 +2,6 @@ package models
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -16,8 +13,6 @@ import (
 )
 
 func TestUser(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -64,18 +59,9 @@ func TestUser(t *testing.T) {
 				t.Fatalf("Failed to connect to database")
 			}
 
-			file, err := os.Open(filepath.Join("testdata", tt.TestFile))
-
-			if err != nil {
-				t.Fatalf("Failed to open file: %v", err)
-			}
-
-			defer file.Close()
-
 			var user User
-
-			if err := json.NewDecoder(file).Decode(&user); err != nil {
-				t.Fatalf("Failed to decode JSON: %v", err)
+			if err := test.LoadFixture(tt.TestFile, &user); err != nil {
+				t.Fatalf("Failed to create user from file: %v", err)
 			}
 
 			initialID := user.ID.String()
@@ -138,8 +124,6 @@ func TestUser(t *testing.T) {
 }
 
 func TestInvalidUser(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -193,7 +177,7 @@ func TestInvalidUser(t *testing.T) {
 			}
 
 			var user User
-			if err := loadFixture("user.json", &user); err != nil {
+			if err := test.LoadFixture("user.json", &user); err != nil {
 				t.Fatalf("Failed to create user from file: %v", err)
 			}
 

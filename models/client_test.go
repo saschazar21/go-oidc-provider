@@ -23,8 +23,6 @@ func populateClientWithMandatoryDefaults(client *Client) {
 }
 
 func TestClient(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -70,12 +68,12 @@ func TestClient(t *testing.T) {
 			}
 
 			var user User
-			if err := loadFixture("user.json", &user); err != nil {
+			if err := test.LoadFixture("user.json", &user); err != nil {
 				t.Fatalf("Failed to create user from file: %v", err)
 			}
 
 			var client Client
-			if err := loadFixture(tt.TestFile, &client); err != nil {
+			if err := test.LoadFixture(tt.TestFile, &client); err != nil {
 				t.Fatalf("Failed to create client from file: %v", err)
 			}
 
@@ -131,8 +129,6 @@ func TestClient(t *testing.T) {
 }
 
 func TestInvalidClient(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -205,7 +201,7 @@ func TestInvalidClient(t *testing.T) {
 			}
 
 			var user User
-			if err := loadFixture("user.json", &user); err != nil {
+			if err := test.LoadFixture("user.json", &user); err != nil {
 				t.Fatalf("Failed to create user from file: %v", err)
 			}
 

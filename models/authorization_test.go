@@ -14,8 +14,6 @@ import (
 )
 
 func TestAuthorization(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../..")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -62,7 +60,7 @@ func TestAuthorization(t *testing.T) {
 			})
 
 			var user User
-			if err := loadFixture("user.json", &user); err != nil {
+			if err := test.LoadFixture("user.json", &user); err != nil {
 				t.Fatalf("Failed to load fixture: %v", err)
 			}
 
@@ -71,7 +69,7 @@ func TestAuthorization(t *testing.T) {
 			}
 
 			var client Client
-			if err := loadFixture("client_minimal.json", &client); err != nil {
+			if err := test.LoadFixture("client_minimal.json", &client); err != nil {
 				t.Fatalf("Failed to load fixture: %v", err)
 			}
 
@@ -81,7 +79,7 @@ func TestAuthorization(t *testing.T) {
 			}
 
 			var authorization Authorization
-			if err := loadFixture(tt.TestFile, &authorization); err != nil {
+			if err := test.LoadFixture(tt.TestFile, &authorization); err != nil {
 				t.Fatalf("Failed to load fixture: %v", err)
 			}
 
@@ -153,8 +151,6 @@ func TestAuthorization(t *testing.T) {
 }
 
 func TestGetAuthorizationByID(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../..")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -164,8 +160,8 @@ func TestGetAuthorizationByID(t *testing.T) {
 	defer pgContainer.Terminate(ctx)
 
 	var existingAuth Authorization
-	if err := loadFixture("authorization_pending.json", &existingAuth); err != nil {
-		t.Errorf("loadFixture() error = %v", err)
+	if err := test.LoadFixture("authorization_pending.json", &existingAuth); err != nil {
+		t.Errorf("test.LoadFixture() error = %v", err)
 	}
 
 	existingAuth.ID = uuid.New()
@@ -231,7 +227,7 @@ func TestGetAuthorizationByID(t *testing.T) {
 
 			if tt.authorization != nil {
 				var user User
-				if err := loadFixture("user.json", &user); err != nil {
+				if err := test.LoadFixture("user.json", &user); err != nil {
 					t.Fatalf("Failed to load fixture: %v", err)
 				}
 
@@ -240,7 +236,7 @@ func TestGetAuthorizationByID(t *testing.T) {
 				}
 
 				var client Client
-				if err := loadFixture(tt.clientFixture, &client); err != nil {
+				if err := test.LoadFixture(tt.clientFixture, &client); err != nil {
 					t.Fatalf("Failed to load fixture: %v", err)
 				}
 
@@ -263,8 +259,6 @@ func TestGetAuthorizationByID(t *testing.T) {
 }
 
 func TestGetAuthorizationByClientAndUser(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../..")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -274,8 +268,8 @@ func TestGetAuthorizationByClientAndUser(t *testing.T) {
 	defer pgContainer.Terminate(ctx)
 
 	var existingAuth Authorization
-	if err := loadFixture("authorization_approved.json", &existingAuth); err != nil {
-		t.Errorf("loadFixture() error = %v", err)
+	if err := test.LoadFixture("authorization_approved.json", &existingAuth); err != nil {
+		t.Errorf("test.LoadFixture() error = %v", err)
 	}
 
 	existingAuth.ID = uuid.New()
@@ -351,7 +345,7 @@ func TestGetAuthorizationByClientAndUser(t *testing.T) {
 
 			if tt.authorization != nil {
 				var user User
-				if err := loadFixture("user.json", &user); err != nil {
+				if err := test.LoadFixture("user.json", &user); err != nil {
 					t.Fatalf("Failed to load fixture: %v", err)
 				}
 
@@ -360,7 +354,7 @@ func TestGetAuthorizationByClientAndUser(t *testing.T) {
 				}
 
 				var client Client
-				if err := loadFixture("client_minimal.json", &client); err != nil {
+				if err := test.LoadFixture("client_minimal.json", &client); err != nil {
 					t.Fatalf("Failed to load fixture: %v", err)
 				}
 

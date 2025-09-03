@@ -17,8 +17,6 @@ var INVALID_CLIENT_ID = "invalid client ID"
 var INVALID_IP_ADDRESS = utils.EncryptedString("invalid_ip")
 
 func TestSession(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -32,12 +30,12 @@ func TestSession(t *testing.T) {
 	conn := db.Connect(ctx)
 
 	var user User
-	if err := loadFixture("user.json", &user); err != nil {
+	if err := test.LoadFixture("user.json", &user); err != nil {
 		t.Fatalf("Failed to create user from file: %v", err)
 	}
 
 	var client Client
-	if err := loadFixture("client.json", &client); err != nil {
+	if err := test.LoadFixture("client.json", &client); err != nil {
 		t.Fatalf("Failed to create client from file: %v", err)
 	}
 

@@ -15,8 +15,6 @@ import (
 const MLT_SNAPSHOT_INIT = "magic_link_token_init"
 
 func TestMagicLinkToken(t *testing.T) {
-	t.Setenv(test.ROOT_DIR_ENV, "../../")
-
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -30,7 +28,7 @@ func TestMagicLinkToken(t *testing.T) {
 	conn := db.Connect(ctx)
 
 	var user User
-	if err := loadFixture("user.json", &user); err != nil {
+	if err := test.LoadFixture("user.json", &user); err != nil {
 		t.Fatalf("Failed to create user from file: %v", err)
 	}
 
