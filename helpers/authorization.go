@@ -1,4 +1,4 @@
-package models
+package helpers
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"net/url"
 
 	"github.com/saschazar21/go-oidc-provider/errors"
+	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/uptrace/bun"
 )
 
 type authorizationRequest struct {
-	r             *http.Request  `json:"-"`
-	authorization *Authorization `json:"-"`
+	r             *http.Request         `json:"-"`
+	authorization *models.Authorization `json:"-"`
 
 	params url.Values `json:"-"`
 }
@@ -29,12 +30,12 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 		}
 	}
 
-	var client *Client
+	var client *models.Client
 	var err errors.OIDCError
 	if ar.authorization.ClientSecret != nil && *ar.authorization.ClientSecret != "" {
-		client, err = GetClientByIDAndSecret(ctx, db, ar.authorization.ClientID, *ar.authorization.ClientSecret)
+		client, err = models.GetClientByIDAndSecret(ctx, db, ar.authorization.ClientID, *ar.authorization.ClientSecret)
 	} else {
-		client, err = GetClientByID(ctx, db, ar.authorization.ClientID)
+		client, err = models.GetClientByID(ctx, db, ar.authorization.ClientID)
 	}
 
 	if err != nil {
@@ -75,7 +76,7 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 	return nil
 }
 
-func ParseAuthorizationRequest(ctx context.Context, db bun.IDB, r *http.Request) (_ *Authorization, err errors.OIDCError) {
+func ParseAuthorizationRequest(ctx context.Context, db bun.IDB, r *http.Request) (_ *models.Authorization, err errors.OIDCError) {
 	if r == nil {
 		return nil, errors.HTTPErrorResponse{
 			StatusCode:  http.StatusBadRequest,

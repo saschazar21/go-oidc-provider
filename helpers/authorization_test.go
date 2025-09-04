@@ -1,4 +1,4 @@
-package models
+package helpers
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/db"
+	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -28,12 +29,12 @@ func TestAuthorizationRequest(t *testing.T) {
 
 	conn := db.Connect(ctx)
 
-	var user User
+	var user models.User
 	if err := test.LoadFixture("user.json", &user); err != nil {
 		t.Fatalf("Failed to create user from file: %v", err)
 	}
 
-	var client Client
+	var client models.Client
 	if err := test.LoadFixture("client.json", &client); err != nil {
 		t.Fatalf("Failed to create client from file: %v", err)
 	}

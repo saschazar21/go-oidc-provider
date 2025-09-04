@@ -13,7 +13,7 @@ type tokenQuery struct {
 	query *bun.SelectQuery
 }
 
-func newTokenQuery(db bun.IDB, value string, tokenType string) *tokenQuery {
+func NewTokenQuery(db bun.IDB, value string, tokenType string) *tokenQuery {
 	if value == "" {
 		return &tokenQuery{query: nil}
 	}
@@ -38,7 +38,11 @@ func newTokenQuery(db bun.IDB, value string, tokenType string) *tokenQuery {
 	return &tokenQuery{query: query}
 }
 
-func (tq *tokenQuery) addAuthorization(isMandatory bool, isPopulated bool, name ...string) *tokenQuery {
+func (tq *tokenQuery) GetQuery() *bun.SelectQuery {
+	return tq.query
+}
+
+func (tq *tokenQuery) PopulateAuthorization(isMandatory bool, isPopulated bool, name ...string) *tokenQuery {
 	if tq.query == nil {
 		return tq
 	}
@@ -75,14 +79,14 @@ func (tq *tokenQuery) addAuthorization(isMandatory bool, isPopulated bool, name 
 
 	if isPopulated {
 		tq = tq.
-			addClient(isMandatory, "Authorization.Client", "authorization__client", alias).
-			addUser(isMandatory, "Authorization.User", "authorization__user", alias)
+			PopulateClient(isMandatory, "Authorization.Client", "authorization__client", alias).
+			PopulateUser(isMandatory, "Authorization.User", "authorization__user", alias)
 	}
 
 	return tq
 }
 
-func (tq *tokenQuery) addClient(isMandatory bool, name ...string) *tokenQuery {
+func (tq *tokenQuery) PopulateClient(isMandatory bool, name ...string) *tokenQuery {
 	if tq.query == nil {
 		return tq
 	}
@@ -123,7 +127,7 @@ func (tq *tokenQuery) addClient(isMandatory bool, name ...string) *tokenQuery {
 	return tq
 }
 
-func (tq *tokenQuery) addUser(isMandatory bool, name ...string) *tokenQuery {
+func (tq *tokenQuery) PopulateUser(isMandatory bool, name ...string) *tokenQuery {
 	if tq.query == nil {
 		return tq
 	}
