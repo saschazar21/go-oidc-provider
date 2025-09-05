@@ -95,9 +95,7 @@ func ParseSession(ctx context.Context, db bun.IDB, r *http.Request, w http.Respo
 }
 
 func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, session *models.Session) errors.HTTPError {
-	cookieStore := utils.NewCookieStore()
-
-	cookieSession, err := cookieStore.Get(nil, SESSION_COOKIE_NAME)
+	cookieSession, err := utils.NewCookieStore().Get(nil, SESSION_COOKIE_NAME)
 	if err != nil {
 		log.Printf("Error retrieving session cookie: %v", err)
 		return errors.HTTPErrorResponse{
