@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
@@ -41,6 +42,7 @@ func TestCreateMagicLinkToken(t *testing.T) {
 		PreHook       func(ctx context.Context, db bun.IDB, t *testing.T) (interface{}, error)
 		CreateRequest func() *http.Request
 		WantErr       bool
+		WantToken     bool
 	}
 
 	tests := []testStruct{
@@ -64,7 +66,8 @@ func TestCreateMagicLinkToken(t *testing.T) {
 
 				return req
 			},
-			WantErr: false,
+			WantErr:   false,
+			WantToken: true,
 		},
 		{
 			Name: "Valid Magic Link Token based on whitelisted email",
@@ -89,7 +92,67 @@ func TestCreateMagicLinkToken(t *testing.T) {
 
 				return req
 			},
-			WantErr: false,
+			WantErr:   false,
+			WantToken: true,
+		},
+		{
+			Name: "Invalid Magic Link Token based on non-registered and non-whitelisted email",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (interface{}, error) {
+				return nil, nil
+			},
+			CreateRequest: func() *http.Request {
+				values := url.Values{
+					"email": {
+						"janedoe@example.com",
+					},
+				}
+				req, _ := http.NewRequest(http.MethodPost, "/magic-link", bytes.NewBuffer([]byte(values.Encode())))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+				return req
+			},
+			WantErr:   false,
+			WantToken: false,
+		},
+		{
+			Name: "Invalid Magic Link Token based on missing email",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (interface{}, error) {
+				return nil, nil
+			},
+			CreateRequest: func() *http.Request {
+				values := url.Values{}
+				req, _ := http.NewRequest(http.MethodPost, "/magic-link", bytes.NewBuffer([]byte(values.Encode())))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+				return req
+			},
+			WantErr:   true,
+			WantToken: false,
+		},
+		{
+			Name: "Wrong HTTP method",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (interface{}, error) {
+				return nil, nil
+			},
+			CreateRequest: func() *http.Request {
+				req, _ := http.NewRequest(http.MethodGet, "/magic-link", nil)
+				return req
+			},
+			WantErr:   true,
+			WantToken: false,
+		},
+		{
+			Name: "Invalid Content-Type",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (interface{}, error) {
+				return nil, nil
+			},
+			CreateRequest: func() *http.Request {
+				req, _ := http.NewRequest(http.MethodPost, "/magic-link", nil)
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+			WantErr:   true,
+			WantToken: false,
 		},
 	}
 
@@ -123,8 +186,12 @@ func TestCreateMagicLinkToken(t *testing.T) {
 				t.Fatalf("ExchangeMagicLinkToken() error = %v, wantErr %v", err, tc.WantErr)
 			}
 			if err == nil {
-				assert.NotNil(t, token, "Expected token to be non-nil")
-				assert.NotNil(t, token.Token, "Expected token string to be non-empty")
+				if !tc.WantToken {
+					assert.Nil(t, token, "Expected token to be nil")
+				} else {
+					assert.NotNil(t, token, "Expected token to be non-nil")
+					assert.NotNil(t, token.Token, "Expected token string to be non-empty")
+				}
 
 				res := w.Result()
 				cookies := res.Cookies()
@@ -138,6 +205,10 @@ func TestCreateMagicLinkToken(t *testing.T) {
 
 				if cookie == nil {
 					t.Fatalf("Expected magic link cookie to be set")
+				}
+
+				if !tc.WantToken {
+					return
 				}
 
 				r = httptest.NewRequest(http.MethodGet, "/create-magic-link", nil)
@@ -234,6 +305,86 @@ func TestConsumeMagicLinkToken(t *testing.T) {
 				return req
 			},
 			WantErr: false,
+		},
+		{
+			Name: "Invalid Magic Link Token consumption with missing token",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (*models.MagicLinkToken, error) {
+				email := utils.HashedString("notoken@mail.com")
+				token := utils.HashedString("sometoken")
+				return &models.MagicLinkToken{
+					ID:    uuid.New(),
+					Email: &email,
+					Token: &token,
+				}, nil
+			},
+			CreateRequest: func(token string, cookie ...*http.Cookie) *http.Request {
+				values := url.Values{}
+				req, _ := http.NewRequest(http.MethodPost, "/magic-link", bytes.NewBuffer([]byte(values.Encode())))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				return req
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Invalid Magic Link Token consumption with wrong token",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (*models.MagicLinkToken, error) {
+				email := utils.HashedString("notoken@mail.com")
+				token := utils.HashedString("sometoken")
+				return &models.MagicLinkToken{
+					ID:    uuid.New(),
+					Email: &email,
+					Token: &token,
+				}, nil
+			},
+			CreateRequest: func(token string, cookie ...*http.Cookie) *http.Request {
+				values := url.Values{
+					"token": {
+						"invalid-token",
+					},
+					"id": {
+						cookie[1].Value,
+					},
+				}
+				req, _ := http.NewRequest(http.MethodPost, "/magic-link", bytes.NewBuffer([]byte(values.Encode())))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				return req
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Wrong HTTP method",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (*models.MagicLinkToken, error) {
+				email := utils.HashedString("notoken@mail.com")
+				token := utils.HashedString("sometoken")
+				return &models.MagicLinkToken{
+					ID:    uuid.New(),
+					Email: &email,
+					Token: &token,
+				}, nil
+			},
+			CreateRequest: func(token string, cookie ...*http.Cookie) *http.Request {
+				req, _ := http.NewRequest(http.MethodGet, "/magic-link", nil)
+				return req
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Invalid Content-Type",
+			PreHook: func(ctx context.Context, db bun.IDB, t *testing.T) (*models.MagicLinkToken, error) {
+				email := utils.HashedString("notoken@mail")
+				token := utils.HashedString("sometoken")
+				return &models.MagicLinkToken{
+					ID:    uuid.New(),
+					Email: &email,
+					Token: &token,
+				}, nil
+			},
+			CreateRequest: func(token string, cookie ...*http.Cookie) *http.Request {
+				req, _ := http.NewRequest(http.MethodPost, "/magic-link", nil)
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+			WantErr: true,
 		},
 	}
 
