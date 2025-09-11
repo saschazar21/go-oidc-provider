@@ -49,9 +49,10 @@ type Authorization struct {
 	ReplacedAuthorization *Authorization `json:"replaced_authorization" schema:"-" bun:"rel:has-one,join:replaced_id=authorization_id"`
 
 	// Additional request parameters for the authorization
-	ClientSecret *string `json:"-" schema:"client_secret" bun:"-"`                                     // Optional client secret for the authorization, if applicable
-	LoginHint    *string `json:"login_hint,omitempty" schema:"login_hint" bun:"-"`                     // Optional login hint for the authorization, if applicable
-	MaxAge       uint16  `json:"max_age,omitempty" schema:"max_age" validate:"omitempty,gt=0" bun:"-"` // Optional maximum age for the authorization, in seconds
+	ClientSecret *string       `json:"-" schema:"client_secret" bun:"-"`                                     // Optional client secret for the authorization, if applicable
+	LoginHint    *string       `json:"login_hint,omitempty" schema:"login_hint" bun:"-"`                     // Optional login hint for the authorization, if applicable
+	MaxAge       uint16        `json:"max_age,omitempty" schema:"max_age" validate:"omitempty,gt=0" bun:"-"` // Optional maximum age for the authorization, in seconds
+	Prompt       *utils.Prompt `json:"prompt,omitempty" schema:"prompt" validate:"omitempty,prompt" bun:"-"` // Optional prompt parameter for the authorization, if applicable
 
 	ApprovedAt *time.Time `json:"approved_at,omitempty" bun:"approved_at"` // Timestamp when the authorization was approved, if applicable
 	RevokedAt  *time.Time `json:"revoked_at,omitempty" bun:"revoked_at"`   // Timestamp when the authorization was revoked, if applicable

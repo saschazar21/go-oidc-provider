@@ -181,7 +181,7 @@ func TestCreateMagicLinkToken(t *testing.T) {
 			r := tc.CreateRequest()
 			w := httptest.NewRecorder()
 
-			token, err := CreateMagicLinkToken(ctx, db, r, w)
+			token, err := CreateMagicLinkToken(ctx, db, w, r)
 			if (err != nil) != tc.WantErr {
 				t.Fatalf("ExchangeMagicLinkToken() error = %v, wantErr %v", err, tc.WantErr)
 			}
@@ -435,7 +435,7 @@ func TestConsumeMagicLinkToken(t *testing.T) {
 			r := tc.CreateRequest(string(*token.Token), cookie, plainCookie)
 			w := httptest.NewRecorder()
 
-			consumedToken, err := ConsumeMagicLinkToken(ctx, db, r, w)
+			consumedToken, err := ConsumeMagicLinkToken(ctx, db, w, r)
 			if (err != nil) != tc.WantErr {
 				t.Fatalf("ExchangeMagicLinkToken() error = %v, wantErr %v", err, tc.WantErr)
 			}

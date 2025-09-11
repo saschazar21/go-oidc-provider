@@ -2,21 +2,44 @@ package helpers
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
-	"github.com/stretchr/testify/assert"
+	"github.com/saschazar21/go-oidc-provider/utils"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/uptrace/bun"
 )
 
 const AR_SNAPSHOT_INIT = "authorization_request_init"
 
+func createUserSession(ctx context.Context, db bun.IDB, r *http.Request, user *models.User) error {
+	w := httptest.NewRecorder()
+
+	// No pre-hook actions needed for GET requests
+	session := models.Session{
+		UserID: user.ID,
+	}
+	if err := session.Save(ctx, db); err != nil {
+		return fmt.Errorf("Failed to create session: %v", err)
+	}
+	if err := SaveSession(ctx, db, w, r, &session); err != nil {
+		return fmt.Errorf("Failed to save session: %v", err)
+	}
+	cookie := w.Result().Cookies()[0]
+	r.AddCookie(cookie)
+	return nil
+}
+
 func TestAuthorizationRequest(t *testing.T) {
+	t.Setenv(utils.COOKIE_AUTH_KEY_ENV, "TURJME5aOGI0OWEwYjFjN2QzZWM1YTdkNGYxYjZlM2E5NTY0Nzg5MjNhYmM0NTZkZWY3ODkwMTIzNDU2Nzg5MA==") // 64 bytes for SHA-512
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)
@@ -56,6 +79,7 @@ func TestAuthorizationRequest(t *testing.T) {
 		Name    string
 		Method  string
 		Params  url.Values
+		PreHook func(ctx context.Context, db bun.IDB, r *http.Request)
 		WantErr bool
 	}
 
@@ -74,6 +98,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
 			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
 			WantErr: false,
 		},
 		{
@@ -89,6 +118,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"nonce":                 {"abc"},
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
+			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
 			},
 			WantErr: false,
 		},
@@ -106,6 +140,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
 			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
 			WantErr: true,
 		},
 		{
@@ -122,6 +161,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
 			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
 			WantErr: true,
 		},
 		{
@@ -136,6 +180,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"nonce":                 {"abc"},
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
+			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
 			},
 			WantErr: true,
 		},
@@ -152,6 +201,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
 			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
 			WantErr: true,
 		},
 		{
@@ -167,6 +221,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
 			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
 			WantErr: true,
 		},
 		{
@@ -180,6 +239,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"scope":         {"openid email profile"},
 				"state":         {"xyz"},
 				"nonce":         {"abc"},
+			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
 			},
 			WantErr: true,
 		},
@@ -196,6 +260,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"nonce":                 {"abc"},
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
+			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
 			},
 			WantErr: true,
 		},
@@ -226,6 +295,11 @@ func TestAuthorizationRequest(t *testing.T) {
 				"code_challenge":        {"challenge"},
 				"code_challenge_method": {"S256"},
 			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
 			WantErr: true,
 		},
 	}
@@ -242,31 +316,33 @@ func TestAuthorizationRequest(t *testing.T) {
 				pgContainer.Restore(ctx, postgres.WithSnapshotName(AR_SNAPSHOT_INIT))
 			})
 
-			var req *http.Request
+			var body io.Reader
 			if tt.Method == http.MethodPost {
-				req = &http.Request{
-					Method:   tt.Method,
-					PostForm: tt.Params,
-				}
-			} else {
-				req = &http.Request{
-					Method: tt.Method,
-					URL: &url.URL{
-						RawQuery: tt.Params.Encode(),
-					},
-				}
+				// For POST requests, encode parameters as form data
+				body = strings.NewReader(tt.Params.Encode())
 			}
 
-			auth, err := ParseAuthorizationRequest(ctx, db, req)
+			r := httptest.NewRequest(tt.Method, AUTHORIZATION_GRANT_ENDPOINT, body)
+			switch tt.Method {
+			case http.MethodGet:
+				r.URL.RawQuery = tt.Params.Encode()
+			case http.MethodPost:
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+
+			if tt.PreHook != nil {
+				tt.PreHook(ctx, db, r)
+			}
+
+			w := httptest.NewRecorder()
+
+			auth, err := HandleAuthorizationRequest(ctx, db, w, r)
 			if (err != nil) != tt.WantErr {
-				t.Fatalf("ParseAuthorizationRequest() error = %v, wantErr %v", err, tt.WantErr)
+				t.Fatalf("HandleAuthorizationRequest() error = %v, wantErr %v", err, tt.WantErr)
 			}
 
-			if !tt.WantErr {
-				assert.NotNil(t, auth, "Authorization should not be nil")
-				assert.NotEqual(t, auth.ID, uuid.Nil, "Authorization ID should not be nil")
-			} else {
-				assert.Nil(t, auth, "Authorization should be nil on error")
+			if err == nil && auth == nil {
+				t.Fatalf("Expected valid authorization, got nil")
 			}
 		})
 	}

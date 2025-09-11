@@ -14,6 +14,7 @@ const (
 	DATE          = "date"
 	GRANT_TYPE    = "grant-type"
 	PKCE_METHOD   = "pkce-method"
+	PROMPT        = "prompt"
 	RESPONSE_TYPE = "response-type"
 	RESULT        = "result"
 	SCOPE         = "scope"
@@ -36,6 +37,7 @@ func NewCustomValidator() *validator.Validate {
 		_customValidator.RegisterValidation(DATE, validateDate)
 		_customValidator.RegisterValidation(GRANT_TYPE, validateGrantType)
 		_customValidator.RegisterValidation(PKCE_METHOD, validatePKCEMethod)
+		_customValidator.RegisterValidation(PROMPT, validatePrompt)
 		_customValidator.RegisterValidation(RESPONSE_TYPE, validateResponseType)
 		_customValidator.RegisterValidation(RESULT, validateResult)
 		_customValidator.RegisterValidation(SCOPE, validateScope)
@@ -297,6 +299,27 @@ func validatePKCEMethod(fl validator.FieldLevel) bool {
 
 	for _, validPKCEMethod := range validPKCEMethods {
 		if pkceMethod == validPKCEMethod {
+			return true
+		}
+	}
+	return false
+}
+
+func validatePrompt(fl validator.FieldLevel) bool {
+	prompt, ok := fl.Field().Interface().(Prompt)
+	if !ok {
+		return false
+	}
+
+	validPrompts := []Prompt{
+		NONE,
+		LOGIN,
+		CONSENT,
+		SELECT_ACCOUNT,
+	}
+
+	for _, validPrompt := range validPrompts {
+		if prompt == validPrompt {
 			return true
 		}
 	}

@@ -97,7 +97,7 @@ func decodeMagicLinkTokenRequest(r *http.Request, dest interface{}) errors.OIDCE
 	return nil
 }
 
-func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, r *http.Request, w http.ResponseWriter) (*models.MagicLinkToken, errors.OIDCError) {
+func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (*models.MagicLinkToken, errors.OIDCError) {
 	if r.Method != http.MethodPost {
 		msg := "Invalid request method. Only POST is allowed."
 		return nil, errors.HTTPErrorResponse{
@@ -173,7 +173,7 @@ func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, r *http.Request, w h
 	return magicLink, nil
 }
 
-func CreateMagicLinkToken(ctx context.Context, db bun.IDB, r *http.Request, w http.ResponseWriter) (*models.MagicLinkToken, errors.OIDCError) {
+func CreateMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (*models.MagicLinkToken, errors.OIDCError) {
 	if r.Method != http.MethodPost {
 		msg := "Invalid request method. Only POST is allowed."
 		return nil, errors.HTTPErrorResponse{
@@ -195,14 +195,7 @@ func CreateMagicLinkToken(ctx context.Context, db bun.IDB, r *http.Request, w ht
 		}
 	}
 
-	ipAddress := r.Header.Get("X-Forwarded-For")
-	if ipAddress == "" {
-		ipAddress = r.Header.Get("X-Real-IP")
-	}
-	if ipAddress == "" {
-		ipAddress = r.RemoteAddr
-	}
-
+	ipAddress := utils.ParseClientIP(r)
 	userAgent := r.Header.Get("User-Agent")
 
 	var req createMagicLinkTokenRequest

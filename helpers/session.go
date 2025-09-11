@@ -12,7 +12,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func getSessionIdFromCookie(r *http.Request, w http.ResponseWriter) (string, errors.HTTPError) {
+func getSessionIdFromCookie(w http.ResponseWriter, r *http.Request) (string, errors.HTTPError) {
 	var statusCode int
 	switch r.Method {
 	case http.MethodGet:
@@ -28,7 +28,7 @@ func getSessionIdFromCookie(r *http.Request, w http.ResponseWriter) (string, err
 	session, err := cookieStore.Get(r, SESSION_COOKIE_NAME)
 	id := session.Values[SESSION_COOKIE_ID]
 
-	if session.IsNew || id == nil {
+	if id == nil {
 		if err != nil {
 			log.Printf("Error retrieving session cookie: %v", err)
 		} else {
@@ -64,11 +64,11 @@ func getSessionIdFromCookie(r *http.Request, w http.ResponseWriter) (string, err
 	return sessionId, nil
 }
 
-func ParseSession(ctx context.Context, db bun.IDB, r *http.Request, w http.ResponseWriter) (*models.Session, errors.HTTPError) {
+func ParseSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (*models.Session, errors.HTTPError) {
 	var id string
 	var err errors.HTTPError
 
-	id, err = getSessionIdFromCookie(r, w)
+	id, err = getSessionIdFromCookie(w, r)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +94,8 @@ func ParseSession(ctx context.Context, db bun.IDB, r *http.Request, w http.Respo
 	return session, nil
 }
 
-func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, session *models.Session) errors.HTTPError {
-	cookieSession, err := utils.NewCookieStore().Get(nil, SESSION_COOKIE_NAME)
+func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request, session *models.Session) errors.HTTPError {
+	cookieSession, err := utils.NewCookieStore().Get(r, SESSION_COOKIE_NAME)
 	if err != nil {
 		log.Printf("Error retrieving session cookie: %v", err)
 		return errors.HTTPErrorResponse{

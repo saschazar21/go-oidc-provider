@@ -13,7 +13,8 @@ type JSONError struct {
 	Description *string       `json:"error_description,omitempty"`
 	URI         *string       `json:"error_uri,omitempty" validate:"omitempty,uri"`
 
-	StatusCode int `json:"-"`
+	Headers    map[string]string `json:"-" validate:"omitempty"`
+	StatusCode int               `json:"-"`
 }
 
 func (e JSONError) Error() (err string) {
@@ -66,6 +67,10 @@ func (e JSONError) Write(w http.ResponseWriter) {
 
 	if e.StatusCode < 100 {
 		e.StatusCode = http.StatusInternalServerError
+	}
+
+	for key, value := range e.Headers {
+		w.Header().Set(key, value)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

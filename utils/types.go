@@ -226,6 +226,8 @@ func (h HashedString) String() string {
 
 type PKCEMethod string
 
+type Prompt string
+
 type ResponseType string
 
 type Result string

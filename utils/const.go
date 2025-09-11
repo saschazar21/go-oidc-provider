@@ -58,6 +58,13 @@ const (
 )
 
 const (
+	NONE           Prompt = "none"
+	LOGIN          Prompt = "login"
+	CONSENT        Prompt = "consent"
+	SELECT_ACCOUNT Prompt = "select_account"
+)
+
+const (
 	CODE                ResponseType = "code"
 	TOKEN               ResponseType = "token"
 	ID_TOKEN            ResponseType = "id_token"
