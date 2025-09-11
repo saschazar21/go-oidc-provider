@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
@@ -35,18 +36,6 @@ func (ar *authorizationRequest) parseSession(ctx context.Context, db bun.IDB) er
 	session, err := ParseSession(ctx, db, ar.w, ar.r)
 	if err != nil {
 		log.Printf("Error parsing session: %v", err)
-
-		if ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.NONE {
-			msg := "Prompt is set to 'none', user is not logged in."
-			log.Printf("%s", msg)
-
-			return errors.OIDCErrorResponse{
-				ErrorCode:        errors.LOGIN_REQUIRED,
-				ErrorDescription: &msg,
-				RedirectURI:      ar.authorization.RedirectURI,
-			}
-		}
-
 		return err
 	}
 
@@ -145,7 +134,19 @@ func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, 
 		}
 	}
 
-	if err := ar.parseSession(ctx, db); err != nil {
+	err := ar.parseSession(ctx, db)
+
+	if ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.NONE && (err != nil || ar.authorization.User == nil) {
+		log.Printf("Prompt is set to 'none' but no valid session found, cannot authenticate user")
+		msg := "Prompt is set to 'none', but user is not logged in."
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.LOGIN_REQUIRED,
+			ErrorDescription: &msg,
+			RedirectURI:      ar.authorization.RedirectURI,
+		}
+	}
+
+	if err != nil {
 		return err
 	}
 
@@ -168,6 +169,16 @@ func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, 
 	}
 
 	if ar.willScopeChange(existingAuth.Scope) {
+		if ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.NONE {
+			log.Printf("Prompt is set to 'none', but scope has changed for client %s and user %s", ar.authorization.ClientID, ar.authorization.User.ID)
+			msg := "Prompt is set to 'none', but requested scope differs from previously granted scope."
+			return errors.OIDCErrorResponse{
+				ErrorCode:        errors.CONSENT_REQUIRED,
+				ErrorDescription: &msg,
+				RedirectURI:      ar.authorization.RedirectURI,
+			}
+		}
+
 		log.Printf("Requested scopes %v differ from previously granted scopes %v", auth.Scope, existingAuth.Scope)
 		// Scope has changed, require re-authorization
 		return nil
@@ -374,6 +385,22 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 	err = ar.HandleAuthorizationRequest(ctx, db)
 
 	auth := ar.authorization
+
+	if auth.Prompt != nil && *auth.Prompt == utils.NONE && auth.ReplacedID == uuid.Nil {
+		if err != nil {
+			if oidcErr, ok := err.(errors.OIDCErrorResponse); ok {
+				return nil, oidcErr
+			}
+		}
+		description := "Prompt is set to 'none', but user has not previously authorized this client."
+		log.Println(description)
+		return nil, errors.OIDCErrorResponse{
+			ErrorCode:        errors.INTERACTION_REQUIRED,
+			ErrorDescription: &description,
+			RedirectURI:      auth.RedirectURI,
+		}
+	}
+
 	// Store the (intermediate) authorization in the database
 	if err := auth.Save(ctx, db); err != nil {
 		log.Printf("Failed to store authorization in database: %v", err)
