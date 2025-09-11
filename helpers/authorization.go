@@ -223,7 +223,7 @@ func parseAuthorizationFromCookie(ctx context.Context, db bun.IDB, w http.Respon
 		}
 	}
 
-	id, ok := cookie.Values[AUTHORIZATION_ID].(string)
+	id, ok := cookie.Values[AUTHORIZATION_COOKIE_ID].(string)
 	if !ok || id == "" {
 		msg := "Failed to parse authorization ID from cookie."
 		log.Printf("%s", msg)
@@ -377,11 +377,6 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 		return
 	}
 
-	if err = ar.AuthenticateClient(ctx, db); err != nil {
-		log.Printf("Client authentication error: %v", err)
-		return
-	}
-
 	err = ar.HandleAuthorizationRequest(ctx, db)
 
 	auth := ar.authorization
@@ -430,7 +425,17 @@ func ParseAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseW
 		return
 	}
 
-	if ar.authorization == nil {
+	if ar.authorization != nil {
+		if err = ar.Validate(); err != nil {
+			log.Printf("Validation error: %v", err)
+			return
+		}
+
+		if err = ar.AuthenticateClient(ctx, db); err != nil {
+			log.Printf("Client authentication error: %v", err)
+			return
+		}
+	} else {
 		log.Printf("Fallback to authorization cookie.")
 		auth, err := parseAuthorizationFromCookie(ctx, db, w, r)
 		if err != nil {
@@ -438,11 +443,6 @@ func ParseAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseW
 		}
 
 		ar.authorization = auth
-	}
-
-	if err = ar.Validate(); err != nil {
-		log.Printf("Validation error: %v", err)
-		return
 	}
 
 	return ar, nil

@@ -14,6 +14,7 @@ import (
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
 	"github.com/saschazar21/go-oidc-provider/utils"
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/uptrace/bun"
 )
@@ -76,34 +77,67 @@ func TestAuthorizationRequest(t *testing.T) {
 	pgContainer.Snapshot(ctx, postgres.WithSnapshotName(AR_SNAPSHOT_INIT))
 
 	type testStruct struct {
-		Name    string
-		Method  string
-		Params  url.Values
-		PreHook func(ctx context.Context, db bun.IDB, r *http.Request)
-		WantErr bool
+		Name        string
+		Method      string
+		Params      url.Values
+		PreHook     func(ctx context.Context, db bun.IDB, r *http.Request)
+		WantErr     bool
+		WantConsent bool
 	}
 
 	tests := []testStruct{
 		{
 			Name:   "Valid Authorization GET Request",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: url.Values{},
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				status := utils.APPROVED
+				challenge := "challenge"
+				challengeMethod := utils.S256
+
+				authorization := models.Authorization{
+					Client:   &client,
+					ClientID: client.ID,
+					User:     &user,
+					UserID:   user.ID,
+					Scope: []utils.Scope{
+						utils.OPENID, utils.EMAIL, utils.PROFILE,
+					},
+					IsActive:            true,
+					Status:              &status,
+					RedirectURI:         client.RedirectURIs[0],
+					ResponseType:        utils.CODE,
+					CodeChallenge:       &challenge,
+					CodeChallengeMethod: &challengeMethod,
+				}
+
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save existing authorization: %v", err)
+				}
+
+				w := httptest.NewRecorder()
+				cookieStore := utils.NewCookieStore()
+				cookieSession, err := cookieStore.New(r, AUTHORIZATION_COOKIE_NAME)
+				if err != nil {
+					t.Fatalf("Failed to create authorization cookie: %v", err)
+				}
+				cookieSession.Values[AUTHORIZATION_COOKIE_ID] = authorization.ID.String()
+				cookieSession.Options.HttpOnly = true
+				cookieSession.Options.SameSite = http.SameSiteStrictMode
+				cookieSession.Options.Secure = true
+
+				if err := cookieSession.Save(r, w); err != nil {
+					t.Fatalf("Failed to save authorization cookie: %v", err)
+				}
+				cookie := w.Result().Cookies()[0]
+				r.AddCookie(cookie)
+
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
 				}
 			},
-			WantErr: false,
+			WantErr:     false,
+			WantConsent: true,
 		},
 		{
 			Name:   "Valid Authorization POST Request",
@@ -120,6 +154,79 @@ func TestAuthorizationRequest(t *testing.T) {
 				"code_challenge_method": {"S256"},
 			},
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				status := utils.APPROVED
+				challenge := "challenge"
+				challengeMethod := utils.S256
+
+				auth := models.Authorization{
+					Client:   &client,
+					ClientID: client.ID,
+					User:     &user,
+					UserID:   user.ID,
+					Scope: []utils.Scope{
+						utils.OPENID, utils.EMAIL, utils.PROFILE,
+					},
+					IsActive:            true,
+					Status:              &status,
+					RedirectURI:         client.RedirectURIs[0],
+					ResponseType:        utils.CODE,
+					CodeChallenge:       &challenge,
+					CodeChallengeMethod: &challengeMethod,
+				}
+
+				if err := auth.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save existing authorization: %v", err)
+				}
+
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr:     false,
+			WantConsent: true,
+		},
+		{
+			Name:   "Missing Session",
+			Method: http.MethodGet,
+			Params: url.Values{
+				"response_type":         {"code"},
+				"client_id":             {client.ID},
+				"client_secret":         {client.Secret.String()},
+				"redirect_uri":          {client.RedirectURIs[0]},
+				"scope":                 {"openid email profile"},
+				"state":                 {"xyz"},
+				"nonce":                 {"abc"},
+				"code_challenge":        {"challenge"},
+				"code_challenge_method": {"S256"},
+			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				// No pre-hook actions needed for this test
+			},
+			WantErr: true,
+		},
+		{
+			Name:   "Missing Consent",
+			Method: http.MethodGet,
+			Params: url.Values{
+				"response_type":         {"code"},
+				"client_id":             {client.ID},
+				"client_secret":         {client.Secret.String()},
+				"redirect_uri":          {client.RedirectURIs[0]},
+				"scope":                 {"openid email profile"},
+				"state":                 {"xyz"},
+				"nonce":                 {"abc"},
+				"code_challenge":        {"challenge"},
+				"code_challenge_method": {"S256"},
+			},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				email := utils.EncryptedString("test@example.com")
+				user := models.User{
+					Email: &email,
+				}
+				if err := user.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save user: %v", err)
+				}
+
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
 				}
@@ -343,6 +450,27 @@ func TestAuthorizationRequest(t *testing.T) {
 
 			if err == nil && auth == nil {
 				t.Fatalf("Expected valid authorization, got nil")
+			}
+
+			if !tt.WantErr {
+				assert.NotNil(t, auth, "Expected valid authorization, got nil")
+				assert.NotEmpty(t, auth.ID, "Expected authorization to have an ID")
+
+				if tt.WantConsent {
+					status := utils.APPROVED
+
+					assert.NotEmpty(t, auth.ReplacedID, "Expected authorization to require consent, but it didn't")
+					assert.NotNil(t, auth.ReplacedAuthorization, "Expected authorization to require consent, but it didn't")
+					assert.True(t, auth.IsActive, "Expected authorization to be active")
+					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'pending'")
+				} else {
+					status := utils.PENDING
+
+					assert.Empty(t, auth.ReplacedID, "Did not expect authorization to require consent, but it did")
+					assert.Nil(t, auth.ReplacedAuthorization, "Did not expect authorization to require consent, but it did")
+					assert.False(t, auth.IsActive, "Expected authorization to not be active")
+					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'approved'")
+				}
 			}
 		})
 	}

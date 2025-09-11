@@ -5,7 +5,7 @@ const (
 	LOGIN_PATH                   = "/login"
 
 	AUTHORIZATION_COOKIE_NAME = "authorization"
-	AUTHORIZATION_ID          = "id"
+	AUTHORIZATION_COOKIE_ID   = "id"
 	MAGIC_LINK_COOKIE_NAME    = "magic_link"
 	MAGIC_LINK_ID             = "id"
 	MAGIC_LINK_EMAIL          = "email"
