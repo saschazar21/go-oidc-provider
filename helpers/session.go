@@ -112,7 +112,7 @@ func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http
 	cookieSession.Options.Path = "/"
 	cookieSession.Options.MaxAge = int(session.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds())
 
-	if err := cookieSession.Save(nil, w); err != nil {
+	if err := cookieSession.Save(r, w); err != nil {
 		log.Printf("Error saving session cookie: %v", err)
 		return errors.HTTPErrorResponse{
 			StatusCode:  http.StatusInternalServerError,

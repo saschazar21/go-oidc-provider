@@ -17,14 +17,6 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func loadUserFixture(t *testing.T) *models.User {
-	var user models.User
-	if err := test.LoadFixture("user.json", &user); err != nil {
-		t.Fatalf("Failed to create user from file: %v", err)
-	}
-	return &user
-}
-
 func TestCreateMagicLinkToken(t *testing.T) {
 	t.Setenv(utils.COOKIE_AUTH_KEY_ENV, "TURJME5aOGI0OWEwYjFjN2QzZWM1YTdkNGYxYjZlM2E5NTY0Nzg5MjNhYmM0NTZkZWY3ODkwMTIzNDU2Nzg5MA==") // 64 bytes for SHA-512
 	ctx := context.Background()
