@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
@@ -20,6 +21,25 @@ import (
 )
 
 const AR_SNAPSHOT_INIT = "authorization_request_init"
+
+func createParams(extra ...url.Values) url.Values {
+	params := url.Values{
+		"response_type":         {"code"},
+		"scope":                 {"openid email profile"},
+		"state":                 {"xyz"},
+		"nonce":                 {"abc"},
+		"code_challenge":        {"challenge"},
+		"code_challenge_method": {"S256"},
+	}
+
+	for _, e := range extra {
+		for k, v := range e {
+			params[k] = v
+		}
+	}
+
+	return params
+}
 
 func createUserSession(ctx context.Context, db bun.IDB, r *http.Request, user *models.User) error {
 	w := httptest.NewRecorder()
@@ -87,7 +107,7 @@ func TestAuthorizationRequest(t *testing.T) {
 
 	tests := []testStruct{
 		{
-			Name:   "Valid Authorization GET Request",
+			Name:   "Valid Authorization GET Request using cookie",
 			Method: http.MethodGet,
 			Params: url.Values{},
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
@@ -140,19 +160,13 @@ func TestAuthorizationRequest(t *testing.T) {
 			WantConsent: true,
 		},
 		{
-			Name:   "Valid Authorization POST Request",
+			Name:   "Valid Authorization POST Request using parameters",
 			Method: http.MethodPost,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				status := utils.APPROVED
 				challenge := "challenge"
@@ -188,17 +202,11 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Missing Session",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				// No pre-hook actions needed for this test
 			},
@@ -207,17 +215,11 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Missing Consent",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				email := utils.EncryptedString("test@example.com")
 				user := models.User{
@@ -234,19 +236,232 @@ func TestAuthorizationRequest(t *testing.T) {
 			WantErr: false,
 		},
 		{
+			Name:   "Scope change requiring new consent",
+			Method: http.MethodGet,
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"scope":         {"openid email profile address"},
+			}),
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				status := utils.APPROVED
+				challenge := "challenge"
+				challengeMethod := utils.S256
+				authorization := models.Authorization{
+					Client:   &client,
+					ClientID: client.ID,
+					User:     &user,
+					UserID:   user.ID,
+					Scope: []utils.Scope{
+						utils.OPENID, utils.EMAIL, utils.PROFILE,
+					},
+					IsActive:            true,
+					Status:              &status,
+					RedirectURI:         client.RedirectURIs[0],
+					ResponseType:        utils.CODE,
+					CodeChallenge:       &challenge,
+					CodeChallengeMethod: &challengeMethod,
+				}
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save existing authorization: %v", err)
+				}
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr:     false,
+			WantConsent: false,
+		},
+		{
+			Name:   "Scope change with prompt=none",
+			Method: http.MethodGet,
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"scope":         {"openid email profile address"},
+				"prompt":        {"none"},
+			}),
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				status := utils.APPROVED
+				challenge := "challenge"
+				challengeMethod := utils.S256
+				authorization := models.Authorization{
+					Client:   &client,
+					ClientID: client.ID,
+					User:     &user,
+					UserID:   user.ID,
+					Scope: []utils.Scope{
+						utils.OPENID, utils.EMAIL, utils.PROFILE,
+					},
+					IsActive:            true,
+					Status:              &status,
+					RedirectURI:         client.RedirectURIs[0],
+					ResponseType:        utils.CODE,
+					CodeChallenge:       &challenge,
+					CodeChallengeMethod: &challengeMethod,
+				}
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save existing authorization: %v", err)
+				}
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr: true,
+		},
+		{
+			Name:   "Missing user session with prompt=none",
+			Method: http.MethodGet,
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"prompt":        {"none"},
+			}),
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				// No pre-hook actions needed for this test
+				fmt.Printf("Missing user")
+			},
+			WantErr: true,
+		},
+		{
+			Name:   "Missing consent with prompt=none",
+			Method: http.MethodGet,
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"prompt":        {"none"},
+			}),
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr: true,
+		},
+		{
+			Name:   "Existing Consent with prompt=consent",
+			Method: http.MethodGet,
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"prompt":        {"consent"},
+			}),
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				status := utils.APPROVED
+				challenge := "challenge"
+				challengeMethod := utils.S256
+
+				authorization := models.Authorization{
+					Client:   &client,
+					ClientID: client.ID,
+					User:     &user,
+					UserID:   user.ID,
+					Scope: []utils.Scope{
+						utils.OPENID, utils.EMAIL, utils.PROFILE,
+					},
+					IsActive:            true,
+					Status:              &status,
+					RedirectURI:         client.RedirectURIs[0],
+					ResponseType:        utils.CODE,
+					CodeChallenge:       &challenge,
+					CodeChallengeMethod: &challengeMethod,
+				}
+
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save existing authorization: %v", err)
+				}
+
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr:     false,
+			WantConsent: false,
+		},
+		{
+			Name:   "Existing session with prompt=login",
+			Method: http.MethodGet,
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"prompt":        {"login"},
+			}),
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Invalid authorization cookie with empty authorization ID",
+			// Using GET method to trigger cookie parsing
+			Method: http.MethodGet,
+			Params: url.Values{},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				w := httptest.NewRecorder()
+				cookieStore := utils.NewCookieStore()
+				cookieSession, err := cookieStore.New(r, AUTHORIZATION_COOKIE_NAME)
+				if err != nil {
+					t.Fatalf("Failed to create authorization cookie: %v", err)
+				}
+				cookieSession.Options.HttpOnly = true
+				cookieSession.Options.SameSite = http.SameSiteStrictMode
+				cookieSession.Options.Secure = true
+				if err := cookieSession.Save(r, w); err != nil {
+					t.Fatalf("Failed to save authorization cookie: %v", err)
+				}
+				cookie := w.Result().Cookies()[0]
+				r.AddCookie(cookie)
+
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr: true,
+		},
+		{
+			Name:   "Invalid authorization cookie with non-existing authorization ID",
+			Method: http.MethodGet,
+			Params: url.Values{},
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				w := httptest.NewRecorder()
+				cookieStore := utils.NewCookieStore()
+				cookieSession, err := cookieStore.New(r, AUTHORIZATION_COOKIE_NAME)
+				if err != nil {
+					t.Fatalf("Failed to create authorization cookie: %v", err)
+				}
+				cookieSession.Values[AUTHORIZATION_COOKIE_ID] = uuid.New().String() // Non-existing UUID
+				cookieSession.Options.HttpOnly = true
+				cookieSession.Options.SameSite = http.SameSiteStrictMode
+				cookieSession.Options.Secure = true
+				if err := cookieSession.Save(r, w); err != nil {
+					t.Fatalf("Failed to save authorization cookie: %v", err)
+				}
+				cookie := w.Result().Cookies()[0]
+				r.AddCookie(cookie)
+
+				if err := createUserSession(ctx, db, r, &user); err != nil {
+					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr: true,
+		},
+		{
 			Name:   "Invalid Response Type",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"invalid"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"response_type": {"invalid_type"},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -257,17 +472,12 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Unsupported Response Type",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code id_token"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"response_type": {"code id_token"},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -278,16 +488,10 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Missing Client ID",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -298,16 +502,10 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Missing Client Secret",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":    {client.ID},
+				"redirect_uri": {client.RedirectURIs[0]},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -318,16 +516,10 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Missing Redirect URI",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -338,15 +530,13 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Missing PKCE Parameters",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type": {"code"},
-				"client_id":     {client.ID},
-				"client_secret": {client.Secret.String()},
-				"redirect_uri":  {client.RedirectURIs[0]},
-				"scope":         {"openid email profile"},
-				"state":         {"xyz"},
-				"nonce":         {"abc"},
-			},
+			Params: createParams(url.Values{
+				"client_id":             {client.ID},
+				"client_secret":         {client.Secret.String()},
+				"redirect_uri":          {client.RedirectURIs[0]},
+				"code_challenge":        {},
+				"code_challenge_method": {},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -357,17 +547,11 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Invalid Redirect URI",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {"invalid-uri"},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {"invalid-uri"},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -378,30 +562,22 @@ func TestAuthorizationRequest(t *testing.T) {
 		{
 			Name:   "Missing Required Parameters",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {client.Secret.String()},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"scope":         {},
+			}),
 			WantErr: true,
 		},
 		{
 			Name:   "Invalid Client Secret",
 			Method: http.MethodGet,
-			Params: url.Values{
-				"response_type":         {"code"},
-				"client_id":             {client.ID},
-				"client_secret":         {"invalid-secret"},
-				"redirect_uri":          {client.RedirectURIs[0]},
-				"scope":                 {"openid email profile"},
-				"state":                 {"xyz"},
-				"nonce":                 {"abc"},
-				"code_challenge":        {"challenge"},
-				"code_challenge_method": {"S256"},
-			},
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {"invalid-secret"},
+				"redirect_uri":  {client.RedirectURIs[0]},
+			}),
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
@@ -459,17 +635,15 @@ func TestAuthorizationRequest(t *testing.T) {
 				if tt.WantConsent {
 					status := utils.APPROVED
 
-					assert.NotEmpty(t, auth.ReplacedID, "Expected authorization to require consent, but it didn't")
-					assert.NotNil(t, auth.ReplacedAuthorization, "Expected authorization to require consent, but it didn't")
+					assert.NotEmpty(t, auth.ReplacedID, "Expected authorization to contain previous consent, but it didn't")
+					assert.NotNil(t, auth.ReplacedAuthorization, "Expected authorization to contain previous consent, but it didn't")
 					assert.True(t, auth.IsActive, "Expected authorization to be active")
-					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'pending'")
+					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'approved'")
 				} else {
 					status := utils.PENDING
 
-					assert.Empty(t, auth.ReplacedID, "Did not expect authorization to require consent, but it did")
-					assert.Nil(t, auth.ReplacedAuthorization, "Did not expect authorization to require consent, but it did")
 					assert.False(t, auth.IsActive, "Expected authorization to not be active")
-					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'approved'")
+					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'pending'")
 				}
 			}
 		})

@@ -205,27 +205,10 @@ func (ar *authorizationRequest) GetParams() url.Values {
 
 func parseAuthorizationFromCookie(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (*models.Authorization, errors.OIDCError) {
 	cookie, _ := utils.NewCookieStore().Get(r, AUTHORIZATION_COOKIE_NAME)
-	if cookie.IsNew {
-		msg := "No authorization data found in cookie."
-		log.Printf("%s", msg)
-
-		if r.Method == http.MethodGet {
-			return nil, errors.HTTPErrorResponse{
-				StatusCode:  http.StatusBadRequest,
-				Message:     errors.BAD_REQUEST,
-				Description: msg,
-			}
-		}
-		return nil, errors.JSONError{
-			StatusCode:  http.StatusBadRequest,
-			ErrorCode:   errors.INVALID_REQUEST,
-			Description: &msg,
-		}
-	}
 
 	id, ok := cookie.Values[AUTHORIZATION_COOKIE_ID].(string)
 	if !ok || id == "" {
-		msg := "Failed to parse authorization ID from cookie."
+		msg := "No authorization data found in cookie."
 		log.Printf("%s", msg)
 
 		cookie.Options.MaxAge = -1 // Delete cookie
