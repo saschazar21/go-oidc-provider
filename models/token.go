@@ -402,6 +402,7 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 	token := Token{
 		Type:            tokenType,
 		AuthorizationID: &authorization.ID,
+		Authorization:   authorization,
 	}
 
 	switch tokenType {

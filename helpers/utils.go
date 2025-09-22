@@ -24,3 +24,12 @@ func loadClientFixture(t *testing.T) *models.Client {
 
 	return &client
 }
+
+func loadAuthFixture(t *testing.T) *models.Authorization {
+	var auth models.Authorization
+	if err := test.LoadFixture("authorization_approved.json", &auth); err != nil {
+		t.Fatalf("Failed to create authorization from file: %v", err)
+	}
+
+	return &auth
+}

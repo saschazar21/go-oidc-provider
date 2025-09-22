@@ -7,6 +7,7 @@
   "response_types": ["code", "code token"],
   "token_endpoint_auth_method": "client_secret_basic",
   "redirect_uris": [
+    "https://minimal-client.example.com/callback",
     "https://app.acme-demo.com/callback",
     "https://app.acme-demo.com/auth/callback"
   ],

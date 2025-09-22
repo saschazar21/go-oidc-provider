@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -233,5 +234,40 @@ type ResponseType string
 type Result string
 
 type Scope string
+
+type ScopeSlice []Scope
+
+func (s ScopeSlice) MarshalJSON() ([]byte, error) {
+	var joined string
+
+	for i, scope := range s {
+		joined += string(scope)
+		if i < len(s)-1 {
+			joined += " "
+		}
+	}
+
+	return []byte(fmt.Sprintf("\"%s\"", joined)), nil
+}
+
+func (s *ScopeSlice) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 {
+		*s = []Scope{}
+		return nil
+	}
+
+	// Split space-separated string into scope slice
+	parts := strings.Split(string(data), " ")
+	var scopes []Scope
+	for _, part := range parts {
+		part = strings.Trim(part, " ")
+		if part != "" {
+			scopes = append(scopes, Scope(part))
+		}
+	}
+
+	*s = scopes
+	return nil
+}
 
 type TokenType string

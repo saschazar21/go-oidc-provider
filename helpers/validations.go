@@ -75,6 +75,12 @@ func (tr *tokenRequest) Validate() (err error) {
 	return
 }
 
+func (tr *tokenResponse) Validate() (err error) {
+	err = utils.NewCustomValidator().Struct(tr)
+
+	return
+}
+
 func (vr *validateMagicLinkTokenRequest) Validate() (err error) {
 	err = utils.NewCustomValidator().Struct(vr)
 
