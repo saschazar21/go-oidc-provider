@@ -236,9 +236,9 @@ func TestExchangeToken(t *testing.T) {
 
 			tt.Request.Code = (*string)(&token.Value)
 
-			tokens, err := ExchangeToken(ctx, db, &tt.Request)
+			tokens, err := tt.Request.HandleRequest(ctx, db)
 			if (err != nil) != tt.WantErr {
-				t.Fatalf("ExchangeToken() error = %v, wantErr %v", err, tt.WantErr)
+				t.Fatalf("HandleRequest() error = %v, wantErr %v", err, tt.WantErr)
 			}
 
 			if !tt.WantErr {
@@ -454,9 +454,9 @@ func TestRotateToken(t *testing.T) {
 
 			tt.Request.RefreshToken = tokenValue
 
-			tokens, err := RotateToken(ctx, db, &tt.Request)
+			tokens, err := tt.Request.HandleRequest(ctx, db)
 			if (err != nil) != tt.WantErr {
-				t.Fatalf("RotateToken() error = %v, wantErr %v", err, tt.WantErr)
+				t.Fatalf("HandleRequest() error = %v, wantErr %v", err, tt.WantErr)
 			}
 
 			if !tt.WantErr {
