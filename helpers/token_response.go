@@ -72,7 +72,7 @@ func NewTokenResponse(tokens ...*models.Token) *tokenResponse {
 			var scope utils.ScopeSlice
 			if token.Scope != nil && len(*token.Scope) > 0 {
 				scope = *token.Scope
-			} else if token.Authorization != nil && token.Authorization.Scope != nil {
+			} else if token.Authorization != nil && len(token.Authorization.Scope) > 0 {
 				scope = token.Authorization.Scope
 			}
 
