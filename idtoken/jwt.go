@@ -3,6 +3,7 @@ package idtoken
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/saschazar21/go-oidc-provider/models"
@@ -46,6 +47,19 @@ func getKey(token *jwt.Token) (interface{}, error) {
 	alg, ok := token.Header["alg"].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing or invalid alg in token header")
+	}
+
+	if alg == "none" {
+		return nil, nil
+	}
+
+	if strings.HasPrefix(alg, "HS") {
+		key, err := GetKey(alg)
+		if err != nil {
+			log.Printf("Error retrieving key for algorithm %s: %v", alg, err)
+			return nil, fmt.Errorf("error retrieving key for algorithm %s", alg)
+		}
+		return key, nil
 	}
 
 	key, err := GetPublicKey(alg)

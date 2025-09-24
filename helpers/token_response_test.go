@@ -19,6 +19,9 @@ const (
 )
 
 func TestTokenResponse(t *testing.T) {
+	t.Setenv("ISSUER_URL", "http://localhost:8080")
+	t.Setenv("KEY_HS256", "dGVzdAo=")
+
 	ctx := context.Background()
 
 	pgContainer, err := test.CreateContainer(t, ctx)

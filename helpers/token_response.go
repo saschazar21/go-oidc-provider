@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/saschazar21/go-oidc-provider/errors"
+	"github.com/saschazar21/go-oidc-provider/idtoken"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
 )
@@ -17,12 +18,6 @@ type tokenResponse struct {
 	RefreshToken string           `json:"refresh_token,omitempty" schema:"refresh_token"`
 	IDToken      string           `json:"id_token,omitempty" schema:"id_token"`
 	Scope        utils.ScopeSlice `json:"scope,omitempty" schema:"scope"`
-}
-
-func (tr *tokenResponse) AddIDToken(idToken string) {
-	// TODO: add ID token struct, once it's ready
-
-	tr.IDToken = idToken
 }
 
 func (tr *tokenResponse) Write(w http.ResponseWriter) {
@@ -62,6 +57,8 @@ func (tr *tokenResponse) Write(w http.ResponseWriter) {
 func NewTokenResponse(tokens ...*models.Token) *tokenResponse {
 	var resp tokenResponse
 
+	tokenMap := make(map[utils.TokenType]*models.Token)
+
 	for _, token := range tokens {
 		if token == nil {
 			continue
@@ -80,10 +77,24 @@ func NewTokenResponse(tokens ...*models.Token) *tokenResponse {
 			resp.ExpiresIn = int64(token.ExpiresAt.ExpiresAt.Sub(token.CreatedAt.CreatedAt).Seconds())
 			resp.Scope = scope
 			resp.TokenType = "Bearer"
+
+			if token.Type == utils.ACCESS_TOKEN_TYPE {
+				tokenMap[utils.ACCESS_TOKEN_TYPE] = token
+			}
 		case utils.REFRESH_TOKEN_TYPE:
 			resp.RefreshToken = token.Value.String()
+
+			tokenMap[utils.REFRESH_TOKEN_TYPE] = token
 		}
 	}
+
+	jwt, err := idtoken.NewSignedJWT(&tokenMap)
+	if err != nil {
+		log.Printf("Failed to create ID token: %v", err)
+		return &resp
+	}
+
+	resp.IDToken = jwt
 
 	return &resp
 }
