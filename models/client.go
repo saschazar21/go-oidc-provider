@@ -140,6 +140,8 @@ func (c *Client) save(ctx context.Context, db bun.IDB, excludedColumns ...string
 }
 
 func (c *Client) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	now := time.Now().UTC()
+
 	switch query.(type) {
 	case *bun.InsertQuery:
 		id, err := utils.RandomBase58String(CLIENT_ID_BYTE_SIZE, CLIENT_ID_PREFIX)
@@ -154,10 +156,10 @@ func (c *Client) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 		}
 
 		c.ID = id
-		c.CreatedAt.CreatedAt = time.Now()
-		c.UpdatedAt.UpdatedAt = time.Now()
+		c.CreatedAt.CreatedAt = now
+		c.UpdatedAt.UpdatedAt = now
 	case *bun.UpdateQuery:
-		c.UpdatedAt.UpdatedAt = time.Now()
+		c.UpdatedAt.UpdatedAt = now
 	}
 
 	return nil

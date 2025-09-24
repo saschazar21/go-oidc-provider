@@ -4,7 +4,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
+	"strings"
+	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/models"
@@ -13,11 +17,10 @@ import (
 
 type Claims struct {
 	Issuer    string           `json:"iss,omitempty" validate:"required,url"`
-	Subject   string           `json:"sub,omitempty" validate:"required"`
-	ExpiresAt *jwt.NumericDate `json:"exp,omitempty" validate:"required,gtfield=IssuedAt"`
-	IssuedAt  *jwt.NumericDate `json:"iat,omitempty"`
-	NotBefore *jwt.NumericDate `json:"nbf,omitempty" validate:"omitempty,gtfield=IssuedAt"`
-	Audience  jwt.ClaimStrings `json:"aud,omitempty" validate:"optional,dive,required"`
+	ExpiresAt utils.Epoch      `json:"exp,omitempty" validate:"required,gtfield=IssuedAt"`
+	IssuedAt  utils.Epoch      `json:"iat,omitempty" validate:"required"`
+	NotBefore utils.Epoch      `json:"nbf,omitempty" validate:"omitempty,gtefield=IssuedAt"`
+	Audience  jwt.ClaimStrings `json:"aud,omitempty" validate:"omitempty,dive,required"`
 	JTI       string           `json:"jti,omitempty" validate:"omitempty,uuid4"`
 
 	Scope           utils.ScopeSlice `json:"scope,omitempty" validate:"omitempty,dive,scope"`
@@ -27,10 +30,7 @@ type Claims struct {
 	StateHash       string           `json:"s_hash,omitempty"`
 
 	*models.User
-	CreatedAt *jwt.NumericDate `json:"created_at,omitempty"` // workaround to avoid marshaling user.CreatedAt.CreatedAt zero value
 	UpdatedAt *jwt.NumericDate `json:"updated_at,omitempty"` // prints the correct format for "profile" scope
-
-	token *map[utils.TokenType]models.Token `json:"-"`
 }
 
 func (c *Claims) populateClaimsFromToken(token *models.Token) error {
@@ -53,16 +53,16 @@ func (c *Claims) populateClaimsFromToken(token *models.Token) error {
 	}
 
 	c.Scope = token.Authorization.Scope
-	c.ExpiresAt = jwt.NewNumericDate(token.ExpiresAt.ExpiresAt)
-	c.IssuedAt = jwt.NewNumericDate(token.CreatedAt.CreatedAt)
+	c.NotBefore = utils.Epoch(token.CreatedAt.CreatedAt)
+	c.ExpiresAt = utils.Epoch(token.ExpiresAt.ExpiresAt)
+	c.IssuedAt = utils.Epoch(token.CreatedAt.CreatedAt)
 
 	if token.Authorization.UserID == uuid.Nil {
 		return fmt.Errorf("user_id is not set in authorization")
 	}
-	c.Subject = token.Authorization.UserID.String()
 
-	if token.ClientID != nil && *token.ClientID != "" {
-		c.Audience = jwt.ClaimStrings{*token.ClientID}
+	if token.Authorization.ClientID != "" {
+		c.Audience = jwt.ClaimStrings{token.Authorization.ClientID}
 	}
 
 	if token.Authorization.Nonce != nil && *token.Authorization.Nonce != "" {
@@ -87,6 +87,8 @@ func (c *Claims) populateUserClaimsFromAuthorization(authorization *models.Autho
 	var user models.User
 	for _, scope := range authorization.Scope {
 		switch scope {
+		case utils.OPENID:
+			user.ID = authorization.User.ID
 		case utils.EMAIL:
 			user.Email = authorization.User.Email
 			user.IsEmailVerified = authorization.User.IsEmailVerified
@@ -123,43 +125,47 @@ func (c *Claims) populateUserClaimsFromAuthorization(authorization *models.Autho
 }
 
 func (c *Claims) Validate() error {
-	if c.token == nil || len(*c.token) == 0 {
-		return fmt.Errorf("token must be set")
-	}
-
 	if err := utils.NewCustomValidator().Struct(c); err != nil {
-		return fmt.Errorf("claims validation failed: %w", err)
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			fields := make([]string, 0, len(validationErrors))
+			for _, ve := range validationErrors {
+				log.Printf("Validation error on field '%s': %s - %v", ve.Field(), ve.Tag(), ve.Value())
+				fields = append(fields, ve.Field())
+			}
+			return fmt.Errorf("invalid claims: %s", strings.Join(fields, ", "))
+		}
+		return fmt.Errorf("%s", "claims validation failed")
 	}
 
 	return nil
 }
 
 func (c *Claims) GetExpirationTime() (*jwt.NumericDate, error) {
-	if c.ExpiresAt == nil {
+	if time.Time(c.ExpiresAt).IsZero() {
 		return nil, fmt.Errorf("expires_at is not set")
 	}
-	return c.ExpiresAt, nil
+	return jwt.NewNumericDate(time.Time(c.ExpiresAt)), nil
 }
 
 func (c *Claims) GetIssuedAt() (*jwt.NumericDate, error) {
-	if c.IssuedAt == nil {
+	if time.Time(c.IssuedAt).IsZero() {
 		return nil, fmt.Errorf("issued_at is not set")
 	}
-	return c.IssuedAt, nil
+	return jwt.NewNumericDate(time.Time(c.IssuedAt)), nil
 }
 
 func (c *Claims) GetNotBefore() (*jwt.NumericDate, error) {
-	if c.NotBefore == nil {
+	if time.Time(c.NotBefore).IsZero() {
 		return nil, fmt.Errorf("not_before is not set")
 	}
-	return c.NotBefore, nil
+	return jwt.NewNumericDate(time.Time(c.NotBefore)), nil
 }
 
 func (c *Claims) GetSubject() (string, error) {
-	if c.Subject == "" {
+	if c.User == nil || c.User.ID == uuid.Nil {
 		return "", fmt.Errorf("subject is not set")
 	}
-	return c.Subject, nil
+	return c.User.ID.String(), nil
 }
 
 func (c *Claims) GetAudience() (jwt.ClaimStrings, error) {
@@ -176,21 +182,46 @@ func (c *Claims) GetIssuer() (string, error) {
 	return c.Issuer, nil
 }
 
-func NewClaims(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
+func validateTokens(tokens *map[utils.TokenType]*models.Token) error {
 	if tokens == nil || len(*tokens) == 0 {
-		return nil, fmt.Errorf("tokens are not set")
+		return fmt.Errorf("tokens must be set")
 	}
 
 	if _, ok := (*tokens)[utils.ACCESS_TOKEN_TYPE]; !ok {
-		return nil, fmt.Errorf("access token is required to create ID token claims")
+		return fmt.Errorf("access token must be set")
 	}
 
-	var claims Claims
-	for _, token := range *tokens {
-		if token.Authorization == nil {
-			return nil, fmt.Errorf("authorization is not set in %s", token.Type)
-		}
+	if (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization == nil {
+		return fmt.Errorf("authorization must be set in access token")
+	}
 
+	if !utils.ContainsValue((*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Scope, utils.OPENID) {
+		return fmt.Errorf("authorization must contain openid scope")
+	}
+	return nil
+}
+
+func NewClaims(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
+	if err := validateTokens(tokens); err != nil {
+		return nil, err
+	}
+
+	var issuer string
+	if os.Getenv(ISSUER_URL_ENV) != "" {
+		issuer = os.Getenv(ISSUER_URL_ENV)
+	} else {
+		issuer = utils.GetDeploymentURL()
+	}
+
+	if issuer == "" {
+		return nil, fmt.Errorf("issuer URL is not set, please set the %s environment variable", ISSUER_URL_ENV)
+	}
+
+	claims := Claims{
+		Issuer: issuer,
+	}
+
+	for _, token := range *tokens {
 		if err := claims.populateClaimsFromToken(token); err != nil {
 			log.Printf("Failed to populate claims from %s: %v", token.Type, err)
 			return nil, err

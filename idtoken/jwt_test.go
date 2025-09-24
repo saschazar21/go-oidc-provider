@@ -3,11 +3,13 @@ package idtoken
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
 	"github.com/saschazar21/go-oidc-provider/utils"
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/uptrace/bun"
 )
@@ -17,6 +19,7 @@ const (
 )
 
 func TestJWT(t *testing.T) {
+	t.Setenv("ISSUER_URL", "http://localhost:8080")
 	t.Setenv("KEY_ES256", "LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUgxRUgxWlVHRXB0Ui80QmhMS2YwL2RTaDhidzRkL2E1U3QxSmdxZ2w5UjlvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFMzFEbzZtOWxhOEtGeWRER0JkRzV3KzVFQVM4QlZST1FhaWpzOU5LM3JJWUN6TjRCNk9lTAo1TU1NVnFhbXh6SXZMZEE3ZlhLZExWcytkMVBoc1diMUdRPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")
 
 	ctx := context.Background()
@@ -104,10 +107,30 @@ func TestJWT(t *testing.T) {
 				tokens = tt.PreHook(ctx, conn)
 			}
 
-			_, err := NewSignedJWT(tokens, "ES256")
+			jwt, err := NewSignedJWT(tokens, "ES256")
 			if (err != nil) != tt.WantErr {
 				t.Errorf("NewSignedJWT() error = %v, wantErr %v", err, tt.WantErr)
 				return
+			}
+
+			if !tt.WantErr {
+				assert.NotEmpty(t, jwt, "Expected non-empty JWT")
+
+				claims, err := ParseJWT(jwt)
+				if err != nil {
+					t.Fatalf("ParseJWT() error = %v", err)
+				}
+
+				subject, err := claims.GetSubject()
+				if err != nil {
+					t.Fatalf("GetSubject() error = %v", err)
+				}
+				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.UserID.String(), subject, "Expected subject to match user ID")
+				assert.Equal(t, client.ID, claims.Audience[0], "Expected audience to match client ID")
+				assert.Equal(t, "http://localhost:8080", claims.Issuer, "Expected issuer to match")
+				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].CreatedAt.CreatedAt.Unix(), time.Time(claims.IssuedAt).Unix(), "Expected created_at to match")
+				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].ExpiresAt.ExpiresAt.Unix(), time.Time(claims.ExpiresAt).Unix(), "Expected expires_at to match")
+				assert.ElementsMatch(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Scope, claims.Scope, "Expected scopes to match")
 			}
 		})
 	}

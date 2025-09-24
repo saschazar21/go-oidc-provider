@@ -6,6 +6,13 @@ const (
 	MASTER_KEY_ENV      = "MASTER_KEY"
 
 	DEFAULT_DATE_FORMAT = "2006-01-02"
+
+	// Netlify-specific environment variables
+	// https://docs.netlify.com/configure-builds/environment-variables/#deploy-urls-and-metadata
+	// https://docs.netlify.com/configure-builds/environment-variables/#system-environment-variables
+	CONTEXT_ENV          = "CONTEXT"
+	URL_ENV              = "URL"
+	DEPLOY_PRIME_URL_ENV = "DEPLOY_PRIME_URL"
 )
 
 const (

@@ -67,7 +67,7 @@ func (a *Address) AfterScanRow(ctx context.Context) error {
 
 func (a *Address) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
 	a.UpdatedAt = &UpdatedAt{
-		time.Now(),
+		time.Now().UTC(),
 	}
 
 	return nil
@@ -173,13 +173,15 @@ func (u *User) AfterScanRow(ctx context.Context) error {
 }
 
 func (u *User) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	now := time.Now().UTC()
+
 	switch query.(type) {
 	case *bun.InsertQuery:
 		u.CreatedAt = &CreatedAt{
-			time.Now(),
+			now,
 		}
 		u.UpdatedAt = &UpdatedAt{
-			time.Now(),
+			now,
 		}
 
 		if u.IsActive == nil {
@@ -195,7 +197,7 @@ func (u *User) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 		}
 	case *bun.UpdateQuery:
 		u.UpdatedAt = &UpdatedAt{
-			time.Now(),
+			now,
 		}
 
 		if u.EmailHash == nil && u.Email != nil {

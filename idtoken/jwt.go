@@ -42,6 +42,21 @@ func loadSigningKey(alg ...string) (string, interface{}, error) {
 	return algorithm, key, nil
 }
 
+func getKey(token *jwt.Token) (interface{}, error) {
+	alg, ok := token.Header["alg"].(string)
+	if !ok {
+		return nil, fmt.Errorf("missing or invalid alg in token header")
+	}
+
+	key, err := GetPublicKey(alg)
+	if err != nil {
+		log.Printf("Error retrieving key for algorithm %s: %v", alg, err)
+		return nil, fmt.Errorf("error retrieving key for algorithm %s", alg)
+	}
+
+	return key, nil
+}
+
 func NewSignedJWT(tokens *map[utils.TokenType]*models.Token, alg ...string) (string, error) {
 	algorithm, key, err := loadSigningKey(alg...)
 	if err != nil {
@@ -73,4 +88,20 @@ func NewSignedJWT(tokens *map[utils.TokenType]*models.Token, alg ...string) (str
 	}
 
 	return signedToken, nil
+}
+
+func ParseJWT(tokenString string) (*Claims, error) {
+	var claims Claims
+	token, err := jwt.ParseWithClaims(tokenString, &claims, getKey)
+	if err != nil {
+		log.Printf("Failed to parse JWT: %v", err)
+		return nil, fmt.Errorf("failed to parse JWT")
+	}
+
+	if !token.Valid {
+		log.Printf("Invalid JWT token")
+		return nil, fmt.Errorf("invalid JWT token")
+	}
+
+	return &claims, nil
 }

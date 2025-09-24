@@ -72,42 +72,35 @@ func LoadKeys() (map[string]interface{}, error) {
 	return _keys, nil
 }
 
-func GetKey(alg string, dest interface{}) error {
+func GetKey(alg string) (interface{}, error) {
 	if len(_keys) == 0 {
 		if _, err := LoadKeys(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	key, exists := _keys[alg]
 	if !exists {
-		return fmt.Errorf("no key found for algorithm %s", alg)
+		return nil, fmt.Errorf("no key found for algorithm %s", alg)
+	}
+
+	return key, nil
+}
+
+func GetPublicKey(alg string) (interface{}, error) {
+	key, err := GetKey(alg)
+	if err != nil {
+		return nil, err
 	}
 
 	switch k := key.(type) {
 	case *rsa.PrivateKey:
-		if destKey, ok := dest.(*rsa.PrivateKey); ok {
-			*destKey = *k
-			return nil
-		}
+		return &k.PublicKey, nil
 	case *ecdsa.PrivateKey:
-		if destKey, ok := dest.(*ecdsa.PrivateKey); ok {
-			*destKey = *k
-			return nil
-		}
+		return &k.PublicKey, nil
 	case ed25519.PrivateKey:
-		if destKey, ok := dest.(*ed25519.PrivateKey); ok {
-			*destKey = k
-			return nil
-		}
-	case []byte:
-		if destKey, ok := dest.(*[]byte); ok {
-			*destKey = k
-			return nil
-		}
+		return ed25519.PublicKey(k[32:]), nil
 	default:
-		return fmt.Errorf("unsupported key type for algorithm %s", alg)
+		return nil, fmt.Errorf("unsupported key type for algorithm %s", alg)
 	}
-
-	return fmt.Errorf("failed to assign key for algorithm %s", alg)
 }

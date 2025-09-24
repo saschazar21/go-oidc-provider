@@ -77,7 +77,7 @@ func TestMagicLinkToken(t *testing.T) {
 		{
 			Name: "Pre-Expire token",
 			PostHook: func(mlt *MagicLinkToken) (*MagicLinkToken, bool) {
-				exp := time.Now().Add(-1 * time.Hour)
+				exp := time.Now().UTC().Add(-1 * time.Hour)
 				mlt.ExpiresAt = ExpiresAt{ExpiresAt: exp}
 				return mlt, false
 			},
@@ -92,7 +92,7 @@ func TestMagicLinkToken(t *testing.T) {
 				mlt.Result = &result
 				isActive := false
 				mlt.IsActive = &isActive
-				consumedAt := time.Now()
+				consumedAt := time.Now().UTC()
 				mlt.ConsumedAt = &consumedAt
 				return mlt, true
 			},

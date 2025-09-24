@@ -132,14 +132,15 @@ func (s *Session) AfterSelect(ctx context.Context, query *bun.SelectQuery) error
 		redirectURI = *s.RedirectURI
 	}
 
-	session := Session{ID: s.ID, LastAccessedAt: time.Now()}
-	session.ExpiresAt.ExpiresAt = time.Now().Add(24 * time.Hour) // Extend for default expiration time
+	now := time.Now().UTC()
+	session := Session{ID: s.ID, LastAccessedAt: now}
+	session.ExpiresAt.ExpiresAt = now.Add(24 * time.Hour) // Extend for default expiration time
 
 	_, err := query.DB().NewUpdate().
 		Model(&session).
 		WherePK().
 		Where("is_active = ?", true).
-		Where("expires_at > ?", time.Now()).
+		Where("expires_at > ?", now).
 		OmitZero().
 		Returning("last_accessed_at").
 		Exec(ctx, &session)
@@ -157,17 +158,19 @@ func (s *Session) AfterSelect(ctx context.Context, query *bun.SelectQuery) error
 }
 
 func (s *Session) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	now := time.Now().UTC()
+
 	switch query.(type) {
 	case *bun.InsertQuery:
-		s.CreatedAt.CreatedAt = time.Now()
-		s.UpdatedAt.UpdatedAt = time.Now()
-		s.LastAccessedAt = time.Now()
+		s.CreatedAt.CreatedAt = now
+		s.UpdatedAt.UpdatedAt = now
+		s.LastAccessedAt = now
 
 		if s.ExpiresAt.ExpiresAt.IsZero() {
-			s.ExpiresAt.ExpiresAt = time.Now().Add(24 * time.Hour) // Default expiration time of 24 hours
+			s.ExpiresAt.ExpiresAt = now.Add(24 * time.Hour) // Default expiration time of 24 hours
 		}
 	case *bun.UpdateQuery:
-		s.UpdatedAt.UpdatedAt = time.Now()
+		s.UpdatedAt.UpdatedAt = now
 	}
 	return nil
 }
@@ -247,13 +250,14 @@ func GetSessionByID(ctx context.Context, db bun.IDB, id string) (*Session, error
 		}
 	}
 
-	session := Session{ID: uid, LastAccessedAt: time.Now()}
+	now := time.Now().UTC()
+	session := Session{ID: uid, LastAccessedAt: now}
 
 	err := db.NewSelect().
 		Model(&session).
 		WherePK().
 		Where("\"session\".\"is_active\" = ?", true).
-		Where("\"session\".\"expires_at\" > ?", time.Now()).
+		Where("\"session\".\"expires_at\" > ?", now).
 		Relation("User", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.
 				Where("\"user\".\"is_active\" = ?", true).

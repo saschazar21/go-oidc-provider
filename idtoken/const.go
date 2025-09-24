@@ -1,6 +1,10 @@
 package idtoken
 
 const (
+	ISSUER_URL_ENV = "ISSUER_URL"
+)
+
+const (
 	HS256 = "HS256"
 	HS384 = "HS384"
 	HS512 = "HS512"

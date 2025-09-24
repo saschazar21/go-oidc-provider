@@ -34,10 +34,11 @@ var _ bun.BeforeAppendModelHook = (*MagicLinkWhitelist)(nil)
 func (m *MagicLinkWhitelist) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 	switch query.(type) {
 	case *bun.InsertQuery:
-		m.CreatedAt.CreatedAt = time.Now()
+		now := time.Now().UTC()
+		m.CreatedAt.CreatedAt = now
 
 		if m.ExpiresAt.ExpiresAt.IsZero() {
-			m.ExpiresAt.ExpiresAt = time.Now().Add(24 * time.Hour) // Default expiration
+			m.ExpiresAt.ExpiresAt = now.Add(24 * time.Hour) // Default expiration
 		}
 
 		if m.Email != nil {
@@ -168,7 +169,7 @@ func GetMagicLinkWhitelistByEmail(ctx context.Context, db bun.IDB, email string)
 				})
 		}).
 		Where("\"magic_link_whitelist\".\"email_hash\" = ?", utils.HashedString(email)).
-		Where("\"magic_link_whitelist\".\"expires_at\" > ?", time.Now()).
+		Where("\"magic_link_whitelist\".\"expires_at\" > ?", time.Now().UTC()).
 		Scan(ctx)
 
 	if err != nil {

@@ -76,7 +76,7 @@ func (m *MagicLinkToken) determineResult(ctx context.Context, db bun.IDB) (*util
 		}
 	}
 
-	if m.ExpiresAt.ExpiresAt.Before(time.Now()) {
+	if m.ExpiresAt.ExpiresAt.Before(time.Now().UTC()) {
 		result := utils.EXPIRED
 		return &result, nil
 	}
@@ -217,13 +217,15 @@ func (m *MagicLinkToken) save(ctx context.Context, db bun.IDB) errors.HTTPError 
 }
 
 func (m *MagicLinkToken) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	now := time.Now().UTC()
+
 	switch query.(type) {
 	case *bun.InsertQuery:
-		m.CreatedAt.CreatedAt = time.Now()
-		m.UpdatedAt.UpdatedAt = time.Now()
-		m.ExpiresAt.ExpiresAt = time.Now().Add(5 * time.Minute) // Default expiration
+		m.CreatedAt.CreatedAt = now
+		m.UpdatedAt.UpdatedAt = now
+		m.ExpiresAt.ExpiresAt = now.Add(5 * time.Minute) // Default expiration
 	case *bun.UpdateQuery:
-		m.UpdatedAt.UpdatedAt = time.Now()
+		m.UpdatedAt.UpdatedAt = now
 	}
 
 	return nil
@@ -268,7 +270,7 @@ func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, id string, token str
 		return nil, httpErr
 	}
 
-	consumedAt := time.Now()
+	consumedAt := time.Now().UTC()
 	isActive := false
 	user := m.User
 	email := utils.HashedString(*user.Email) // Store email hash

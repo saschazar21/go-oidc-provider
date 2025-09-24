@@ -243,10 +243,12 @@ func (m *Token) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
 func (m *Token) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 	switch query.(type) {
 	case *bun.InsertQuery:
-		m.CreatedAt.CreatedAt = time.Now().UTC()
+		now := time.Now().UTC()
+
+		m.CreatedAt.CreatedAt = now
 
 		if m.ExpiresAt.ExpiresAt.IsZero() {
-			m.ExpiresAt.ExpiresAt = time.Now().UTC().Add(CLIENT_CREDENTIALS_TOKEN_LIFETIME)
+			m.ExpiresAt.ExpiresAt = now.Add(CLIENT_CREDENTIALS_TOKEN_LIFETIME)
 		}
 	case *bun.UpdateQuery:
 		m.Type = ""
@@ -405,11 +407,13 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 		Authorization:   authorization,
 	}
 
+	now := time.Now().UTC()
+
 	switch tokenType {
 	case utils.AUTHORIZATION_CODE_TYPE:
 		token.RedirectURI = &authorization.RedirectURI
 		token.ExpiresAt = ExpiresAt{
-			ExpiresAt: time.Now().UTC().Add(AUTHORIZATION_CODE_TOKEN_LIFETIME), // Default expiration to 5 minutes
+			ExpiresAt: now.Add(AUTHORIZATION_CODE_TOKEN_LIFETIME), // Default expiration to 5 minutes
 		}
 	case utils.ACCESS_TOKEN_TYPE:
 		lifetime := ACCESS_TOKEN_LIFETIME // Default expiration to 5 minutes
@@ -417,7 +421,7 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 			lifetime = time.Duration(client.AccessTokenLifetime) * time.Second
 		}
 		token.ExpiresAt = ExpiresAt{
-			ExpiresAt: time.Now().UTC().Add(lifetime),
+			ExpiresAt: now.Add(lifetime),
 		}
 	case utils.REFRESH_TOKEN_TYPE:
 		lifetime := REFRESH_TOKEN_LIFETIME // Default expiration to 30 days
@@ -425,7 +429,7 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 			lifetime = time.Duration(client.RefreshTokenLifetime) * time.Second
 		}
 		token.ExpiresAt = ExpiresAt{
-			ExpiresAt: time.Now().UTC().Add(lifetime),
+			ExpiresAt: now.Add(lifetime),
 		}
 	}
 
@@ -433,7 +437,7 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 		return nil, err
 	}
 
-	expiresAt := time.Now().UTC().Add(AUTHORIZATION_GRANT_LIFETIME)
+	expiresAt := now.Add(AUTHORIZATION_GRANT_LIFETIME)
 	if token.ExpiresAt.ExpiresAt.Before(expiresAt) {
 		expiresAt = token.ExpiresAt.ExpiresAt
 	}
@@ -498,7 +502,7 @@ func revokeTokensByAuthorizationID(ctx context.Context, db bun.IDB, authorizatio
 		Model(&token).
 		Where("\"token\".\"authorization_id\" = ?", authorizationID).
 		Where("\"token\".\"is_active\" = ?", true).
-		Where("\"token\".\"expires_at\" > ?", time.Now()).
+		Where("\"token\".\"expires_at\" > ?", revokedAt).
 		OmitZero().
 		Exec(ctx)
 
@@ -539,7 +543,7 @@ func revokeTokenByID(ctx context.Context, db bun.IDB, id uuid.UUID, reason *stri
 		Model(&token).
 		WherePK().
 		Where("\"token\".\"is_active\" = ?", true).
-		Where("\"token\".\"expires_at\" > ?", time.Now()).
+		Where("\"token\".\"expires_at\" > ?", revokedAt).
 		OmitZero().
 		Exec(ctx)
 

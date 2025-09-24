@@ -131,12 +131,10 @@ func (e *EncryptedString) Scan(value interface{}) error {
 	return nil
 }
 
-type Epoch struct {
-	time.Time
-}
+type Epoch time.Time
 
 func (e Epoch) MarshalJSON() ([]byte, error) {
-	ts := e.Unix()
+	ts := time.Time(e).Unix()
 	return []byte(fmt.Sprintf("%d", ts)), nil
 }
 
@@ -148,17 +146,15 @@ func (e *Epoch) UnmarshalJSON(data []byte) (err error) {
 		return fmt.Errorf("failed to parse epoch: %w", err)
 	}
 
-	e.Time = time.Unix(epoch, 0)
+	*e = Epoch(time.Unix(epoch, 0))
 
 	return
 }
 
-type EpochMillis struct {
-	time.Time
-}
+type EpochMillis time.Time
 
 func (e EpochMillis) MarshalJSON() ([]byte, error) {
-	ms := e.UnixMilli()
+	ms := time.Time(e).UnixMilli()
 	return []byte(fmt.Sprintf("%d", ms)), nil
 }
 
@@ -170,7 +166,7 @@ func (e *EpochMillis) UnmarshalJSON(data []byte) (err error) {
 		return fmt.Errorf("failed to parse epoch: %w", err)
 	}
 
-	e.Time = time.UnixMilli(epoch)
+	*e = EpochMillis(time.UnixMilli(epoch))
 
 	return
 }
@@ -261,6 +257,7 @@ func (s *ScopeSlice) UnmarshalJSON(data []byte) error {
 	var scopes []Scope
 	for _, part := range parts {
 		part = strings.Trim(part, " ")
+		part = strings.Trim(part, "\"")
 		if part != "" {
 			scopes = append(scopes, Scope(part))
 		}

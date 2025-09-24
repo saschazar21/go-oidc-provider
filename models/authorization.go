@@ -68,6 +68,8 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 		return nil
 	}
 
+	now := time.Now().UTC()
+
 	var err error
 	var replacedAuthorizations []Authorization
 	var result sql.Result
@@ -87,7 +89,7 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 		Where("\"token\".\"is_active\" = ?", true).
 		Where("\"token\".\"authorization_id\" = \"_auth\".\"authorization_id\"").
 		Set("is_active = ?", false).
-		Set("revoked_at = ?", time.Now().UTC()).
+		Set("revoked_at = ?", now).
 		Set("revocation_reason = ?", "revoked by new authorization grant").
 		Exec(ctx)
 
@@ -105,8 +107,8 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 		TableExpr("_auth").
 		Where("\"authorization\".\"authorization_id\" = \"_auth\".\"authorization_id\"").
 		Set("is_active = ?", false).
-		Set("revoked_at = ?", time.Now().UTC()).
-		Set("expires_at = ?", time.Now().UTC().Add(REPLACED_AUTHORIZATION_GRANT_LIFETIME)). // Set expiration to 30 days from now
+		Set("revoked_at = ?", now).
+		Set("expires_at = ?", now.Add(REPLACED_AUTHORIZATION_GRANT_LIFETIME)). // Set expiration to 30 days from now
 		Returning("*").
 		OmitZero().
 		Exec(ctx, &replacedAuthorizations)
@@ -141,10 +143,12 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 func (a *Authorization) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 	switch query.(type) {
 	case *bun.InsertQuery:
-		a.CreatedAt.CreatedAt = time.Now()
+		now := time.Now().UTC()
+
+		a.CreatedAt.CreatedAt = now
 
 		if a.ExpiresAt.ExpiresAt.IsZero() {
-			a.ExpiresAt.ExpiresAt = time.Now().Add(AUTHORIZATION_CODE_TOKEN_LIFETIME) // Default expiration equals authorization code lifetime
+			a.ExpiresAt.ExpiresAt = now.Add(AUTHORIZATION_CODE_TOKEN_LIFETIME) // Default expiration equals authorization code lifetime
 		}
 	case *bun.UpdateQuery:
 		// No special handling needed for updates at the moment

@@ -327,7 +327,7 @@ func validatePrompt(fl validator.FieldLevel) bool {
 }
 
 func validateTimeGtNow(fl validator.FieldLevel) bool {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	switch t := fl.Field().Interface().(type) {
 	case time.Time:
@@ -360,26 +360,26 @@ func validateTimeGtNow(fl validator.FieldLevel) bool {
 		}
 		return t.Time.After(now)
 	case Epoch:
-		return t.Time.After(now)
+		return time.Time(t).After(now)
 	case *Epoch:
 		if t == nil {
 			return false
 		}
-		return t.Time.After(now)
+		return time.Time(*t).After(now)
 	case EpochMillis:
-		return t.Time.After(now)
+		return time.Time(t).After(now)
 	case *EpochMillis:
 		if t == nil {
 			return false
 		}
-		return t.Time.After(now)
+		return time.Time(*t).After(now)
 	default:
 		return false
 	}
 }
 
 func validateTimeLtNow(fl validator.FieldLevel) bool {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	switch t := fl.Field().Interface().(type) {
 	case time.Time:
@@ -412,26 +412,26 @@ func validateTimeLtNow(fl validator.FieldLevel) bool {
 		}
 		return t.Time.Before(now)
 	case Epoch:
-		return t.Time.Before(now)
+		return time.Time(t).Before(now)
 	case *Epoch:
 		if t == nil {
 			return false
 		}
-		return t.Time.Before(now)
+		return time.Time(*t).Before(now)
 	case EpochMillis:
-		return t.Time.Before(now)
+		return time.Time(t).Before(now)
 	case *EpochMillis:
 		if t == nil {
 			return false
 		}
-		return t.Time.Before(now)
+		return time.Time(*t).Before(now)
 	default:
 		return false
 	}
 }
 
 func validateTimeGteNow(fl validator.FieldLevel) bool {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	switch t := fl.Field().Interface().(type) {
 	case time.Time:
@@ -464,26 +464,26 @@ func validateTimeGteNow(fl validator.FieldLevel) bool {
 		}
 		return t.Time.Equal(now) || t.Time.After(now)
 	case Epoch:
-		return t.Time.Equal(now) || t.Time.After(now)
+		return time.Time(t).Equal(now) || time.Time(t).After(now)
 	case *Epoch:
 		if t == nil {
 			return false
 		}
-		return t.Time.Equal(now) || t.Time.After(now)
+		return time.Time(*t).Equal(now) || time.Time(*t).After(now)
 	case EpochMillis:
-		return t.Time.Equal(now) || t.Time.After(now)
+		return time.Time(t).Equal(now) || time.Time(t).After(now)
 	case *EpochMillis:
 		if t == nil {
 			return false
 		}
-		return t.Time.Equal(now) || t.Time.After(now)
+		return time.Time(*t).Equal(now) || time.Time(*t).After(now)
 	default:
 		return false
 	}
 }
 
 func validateTimeLteNow(fl validator.FieldLevel) bool {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	switch t := fl.Field().Interface().(type) {
 	case time.Time:
@@ -516,19 +516,19 @@ func validateTimeLteNow(fl validator.FieldLevel) bool {
 		}
 		return t.Time.Equal(now) || t.Time.Before(now)
 	case Epoch:
-		return t.Time.Equal(now) || t.Time.Before(now)
+		return time.Time(t).Equal(now) || time.Time(t).Before(now)
 	case *Epoch:
 		if t == nil {
 			return false
 		}
-		return t.Time.Equal(now) || t.Time.Before(now)
+		return time.Time(*t).Equal(now) || time.Time(*t).Before(now)
 	case EpochMillis:
-		return t.Time.Equal(now) || t.Time.Before(now)
+		return time.Time(t).Equal(now) || time.Time(t).Before(now)
 	case *EpochMillis:
 		if t == nil {
 			return false
 		}
-		return t.Time.Equal(now) || t.Time.Before(now)
+		return time.Time(*t).Equal(now) || time.Time(*t).Before(now)
 	default:
 		return false
 	}
