@@ -104,32 +104,32 @@ type User struct {
 	bun.BaseModel `bun:"table:oidc_users"`
 
 	ID                    uuid.UUID              `json:"sub" bun:"user_id,type:uuid,pk,default:gen_random_uuid()"`
-	Email                 *utils.EncryptedString `json:"email" validate:"required,email" bun:"email,type:bytea,unique,notnull"` // encrypt
-	EmailHash             *utils.HashedString    `json:"-" bun:"email_hash,type:bytea,unique,notnull"`                          // hashed base64-url-encoded
-	IsEmailVerified       *bool                  `json:"email_verified" bun:"email_verified,notnull"`
-	PhoneNumber           *string                `json:"phone_number" validate:"omitempty,e164" bun:"phone_number,type:bytea,unique"` // encrypt
-	IsPhoneNumberVerified *bool                  `json:"phone_number_verified" bun:"phone_number_verified"`
-	GivenName             *utils.EncryptedString `json:"given_name" validate:"omitempty,alphanumunicode" bun:"given_name,type:bytea"`   // encrypt
-	FamilyName            *utils.EncryptedString `json:"family_name" validate:"omitempty,alphanumunicode" bun:"family_name,type:bytea"` // encrypt
-	MiddleName            *utils.EncryptedString `json:"middle_name" validate:"omitempty,alphanumunicode" bun:"middle_name,type:bytea"` // encrypt
-	Name                  *string                `json:"name" bun:"-"`
-	Nickname              *string                `json:"nickname" validate:"omitempty,alphanum" bun:"nickname"`
-	PreferredUsername     *string                `json:"preferred_username" validate:"omitempty,alphanum" bun:"preferred_username"`
-	Profile               *utils.EncryptedString `json:"profile" validate:"omitempty,http_url" bun:"profile"`
-	Picture               *utils.EncryptedString `json:"picture" validate:"omitempty,http_url" bun:"picture"`
-	Website               *utils.EncryptedString `json:"website" validate:"omitempty,http_url" bun:"website"`
-	Gender                *utils.EncryptedString `json:"gender" validate:"omitempty,alphanumunicode" bun:"gender,type:bytea"`   // encrypt
-	Birthdate             *utils.EncryptedDate   `json:"birthdate" validate:"omitempty,time-lt-now" bun:"birthdate,type:bytea"` // encrypt
-	Zoneinfo              *string                `json:"zoneinfo" validate:"omitempty,timezone" bun:"zoneinfo"`
-	Locale                *string                `json:"locale" validate:"omitempty,bcp47_language_tag" bun:"locale"`
+	Email                 *utils.EncryptedString `json:"email,omitempty" validate:"required,email" bun:"email,type:bytea,unique,notnull"` // encrypt
+	EmailHash             *utils.HashedString    `json:"-" bun:"email_hash,type:bytea,unique,notnull"`                                    // hashed base64-url-encoded
+	IsEmailVerified       *bool                  `json:"email_verified,omitempty" bun:"email_verified,notnull"`
+	PhoneNumber           *string                `json:"phone_number,omitempty" validate:"omitempty,e164" bun:"phone_number,type:bytea,unique"` // encrypt
+	IsPhoneNumberVerified *bool                  `json:"phone_number_verified,omitempty" bun:"phone_number_verified"`
+	GivenName             *utils.EncryptedString `json:"given_name,omitempty" validate:"omitempty,alphanumunicode" bun:"given_name,type:bytea"`   // encrypt
+	FamilyName            *utils.EncryptedString `json:"family_name,omitempty" validate:"omitempty,alphanumunicode" bun:"family_name,type:bytea"` // encrypt
+	MiddleName            *utils.EncryptedString `json:"middle_name,omitempty" validate:"omitempty,alphanumunicode" bun:"middle_name,type:bytea"` // encrypt
+	Name                  *string                `json:"name,omitempty" bun:"-"`
+	Nickname              *string                `json:"nickname,omitempty" validate:"omitempty,alphanum" bun:"nickname"`
+	PreferredUsername     *string                `json:"preferred_username,omitempty" validate:"omitempty,alphanum" bun:"preferred_username"`
+	Profile               *utils.EncryptedString `json:"profile,omitempty" validate:"omitempty,http_url" bun:"profile"`
+	Picture               *utils.EncryptedString `json:"picture,omitempty" validate:"omitempty,http_url" bun:"picture"`
+	Website               *utils.EncryptedString `json:"website,omitempty" validate:"omitempty,http_url" bun:"website"`
+	Gender                *utils.EncryptedString `json:"gender,omitempty" validate:"omitempty,alphanumunicode" bun:"gender,type:bytea"`   // encrypt
+	Birthdate             *utils.EncryptedDate   `json:"birthdate,omitempty" validate:"omitempty,time-lt-now" bun:"birthdate,type:bytea"` // encrypt
+	Zoneinfo              *string                `json:"zoneinfo,omitempty" validate:"omitempty,timezone" bun:"zoneinfo"`
+	Locale                *string                `json:"locale,omitempty" validate:"omitempty,bcp47_language_tag" bun:"locale"`
 
-	LastLoginAt *time.Time `json:"last_login_at" validate:"omitempty,time-lte-now" bun:"last_login_at"`
-	IsActive    *bool      `json:"is_active" bun:"is_active,notnull,default:true"`
-	IsLocked    *bool      `json:"is_locked" bun:"is_locked,notnull,default:false"`
+	LastLoginAt *time.Time `json:"last_login_at,omitempty" validate:"omitempty,time-lte-now" bun:"last_login_at"`
+	IsActive    *bool      `json:"is_active,omitempty" bun:"is_active,notnull,default:true"`
+	IsLocked    *bool      `json:"is_locked,omitempty" bun:"is_locked,notnull,default:false"`
 
-	CustomClaims *map[string]interface{} `json:"custom_claims" validate:"omitempty" bun:"custom_claims,type:jsonb"`
+	CustomClaims *map[string]interface{} `json:"custom_claims,omitempty" validate:"omitempty" bun:"custom_claims,type:jsonb"`
 
-	Address *Address `json:"address" validate:"omitempty" bun:"rel:has-one,join:user_id=user_id"`
+	Address *Address `json:"address,omitempty" validate:"omitempty" bun:"rel:has-one,join:user_id=user_id"`
 
 	CreatedAt
 	UpdatedAt

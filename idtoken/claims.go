@@ -26,6 +26,10 @@ type Claims struct {
 	CodeHash        string           `json:"c_hash,omitempty"`
 	StateHash       string           `json:"s_hash,omitempty"`
 
+	*models.User
+	CreatedAt *jwt.NumericDate `json:"created_at,omitempty"` // workaround to avoid marshaling user.CreatedAt.CreatedAt zero value
+	UpdatedAt *jwt.NumericDate `json:"updated_at,omitempty"` // prints the correct format for "profile" scope
+
 	token *map[utils.TokenType]models.Token `json:"-"`
 }
 
@@ -72,6 +76,47 @@ func (c *Claims) populateClaimsFromToken(token *models.Token) error {
 		c.StateHash = enc
 	}
 
+	return nil
+}
+
+func (c *Claims) populateUserClaimsFromAuthorization(authorization *models.Authorization) error {
+	if authorization.User == nil {
+		return fmt.Errorf("user is not set in authorization")
+	}
+
+	var user models.User
+	for _, scope := range authorization.Scope {
+		switch scope {
+		case utils.EMAIL:
+			user.Email = authorization.User.Email
+			user.IsEmailVerified = authorization.User.IsEmailVerified
+		case utils.PHONE:
+			user.PhoneNumber = authorization.User.PhoneNumber
+			user.IsPhoneNumberVerified = authorization.User.IsPhoneNumberVerified
+		case utils.ADDRESS:
+			user.Address = authorization.User.Address
+			user.Address.CreatedAt = models.CreatedAt{} // avoid marshaling zero value
+			user.Address.UpdatedAt = models.UpdatedAt{} // avoid marshaling zero value
+		case utils.PROFILE:
+			user.Name = authorization.User.Name
+			user.GivenName = authorization.User.GivenName
+			user.FamilyName = authorization.User.FamilyName
+			user.MiddleName = authorization.User.MiddleName
+			user.Nickname = authorization.User.Nickname
+			user.PreferredUsername = authorization.User.PreferredUsername
+			user.Birthdate = authorization.User.Birthdate
+			user.Zoneinfo = authorization.User.Zoneinfo
+			user.Locale = authorization.User.Locale
+			user.Picture = authorization.User.Picture
+			user.Profile = authorization.User.Profile
+			user.Website = authorization.User.Website
+			user.Gender = authorization.User.Gender
+			user.UpdatedAt = authorization.User.UpdatedAt
+			c.UpdatedAt = jwt.NewNumericDate(authorization.User.UpdatedAt.UpdatedAt)
+		}
+	}
+
+	c.User = &user
 	return nil
 }
 
@@ -147,6 +192,13 @@ func NewClaims(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
 		if err := claims.populateClaimsFromToken(token); err != nil {
 			log.Printf("Failed to populate claims from %s: %v", token.Type, err)
 			return nil, err
+		}
+
+		if token.Type == utils.ACCESS_TOKEN_TYPE {
+			if err := claims.populateUserClaimsFromAuthorization(token.Authorization); err != nil {
+				log.Printf("Failed to populate user claims from authorization: %v", err)
+				return nil, err
+			}
 		}
 	}
 

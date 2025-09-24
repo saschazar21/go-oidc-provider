@@ -30,7 +30,7 @@ func TestJWT(t *testing.T) {
 	conn := db.Connect(ctx)
 
 	var user models.User
-	if err := test.LoadFixture("user.json", &user); err != nil {
+	if err := test.LoadFixture("user_address.json", &user); err != nil {
 		t.Fatalf("Failed to load user fixture: %v", err)
 	}
 
@@ -77,7 +77,9 @@ func TestJWT(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB) *map[utils.TokenType]*models.Token {
 				tokens := make(map[utils.TokenType]*models.Token)
 				// Create a valid access token
-				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &auth)
+				authorization := auth                                                                 // create a copy to avoid modifying the original
+				authorization.Scope = []utils.Scope{"openid", "profile", "email", "address", "phone"} // request all scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 				if err != nil {
 					t.Fatalf("Failed to create access token: %v", err)
 				}
