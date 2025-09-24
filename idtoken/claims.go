@@ -95,8 +95,8 @@ func (c *Claims) populateUserClaimsFromAuthorization(authorization *models.Autho
 			user.IsPhoneNumberVerified = authorization.User.IsPhoneNumberVerified
 		case utils.ADDRESS:
 			user.Address = authorization.User.Address
-			user.Address.CreatedAt = models.CreatedAt{} // avoid marshaling zero value
-			user.Address.UpdatedAt = models.UpdatedAt{} // avoid marshaling zero value
+			user.Address.CreatedAt = nil // avoid marshaling zero value
+			user.Address.UpdatedAt = nil
 		case utils.PROFILE:
 			user.Name = authorization.User.Name
 			user.GivenName = authorization.User.GivenName
@@ -111,10 +111,12 @@ func (c *Claims) populateUserClaimsFromAuthorization(authorization *models.Autho
 			user.Profile = authorization.User.Profile
 			user.Website = authorization.User.Website
 			user.Gender = authorization.User.Gender
-			user.UpdatedAt = authorization.User.UpdatedAt
 			c.UpdatedAt = jwt.NewNumericDate(authorization.User.UpdatedAt.UpdatedAt)
 		}
 	}
+
+	user.CreatedAt = nil // avoid marshaling zero value
+	user.UpdatedAt = nil
 
 	c.User = &user
 	return nil

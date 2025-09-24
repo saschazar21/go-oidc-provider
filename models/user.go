@@ -26,8 +26,8 @@ type Address struct {
 	Country       *string                `json:"country" bun:"country"`               // encrypt
 	Formatted     *string                `json:"formatted" bun:"-"`
 
-	CreatedAt
-	UpdatedAt
+	*CreatedAt // Pointer to avoid marshaling zero value in JWT
+	*UpdatedAt // Pointer to avoid marshaling zero value in JWT
 }
 
 var _ bun.AfterScanRowHook = (*Address)(nil)
@@ -66,7 +66,9 @@ func (a *Address) AfterScanRow(ctx context.Context) error {
 }
 
 func (a *Address) BeforeUpdate(ctx context.Context, query *bun.UpdateQuery) error {
-	a.UpdatedAt.UpdatedAt = time.Now()
+	a.UpdatedAt = &UpdatedAt{
+		time.Now(),
+	}
 
 	return nil
 }
@@ -131,8 +133,8 @@ type User struct {
 
 	Address *Address `json:"address,omitempty" validate:"omitempty" bun:"rel:has-one,join:user_id=user_id"`
 
-	CreatedAt
-	UpdatedAt
+	*CreatedAt // Pointer to avoid marshaling zero value in JWT
+	*UpdatedAt // Pointer to avoid marshaling zero value in JWT
 }
 
 var _ bun.AfterScanRowHook = (*User)(nil)
@@ -173,8 +175,13 @@ func (u *User) AfterScanRow(ctx context.Context) error {
 func (u *User) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 	switch query.(type) {
 	case *bun.InsertQuery:
-		u.CreatedAt.CreatedAt = time.Now()
-		u.UpdatedAt.UpdatedAt = time.Now()
+		u.CreatedAt = &CreatedAt{
+			time.Now(),
+		}
+		u.UpdatedAt = &UpdatedAt{
+			time.Now(),
+		}
+
 		if u.IsActive == nil {
 			isActive := true
 			u.IsActive = &isActive
@@ -187,7 +194,10 @@ func (u *User) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 			u.EmailHash = (*utils.HashedString)(u.Email)
 		}
 	case *bun.UpdateQuery:
-		u.UpdatedAt.UpdatedAt = time.Now()
+		u.UpdatedAt = &UpdatedAt{
+			time.Now(),
+		}
+
 		if u.EmailHash == nil && u.Email != nil {
 			u.EmailHash = (*utils.HashedString)(u.Email)
 		}
