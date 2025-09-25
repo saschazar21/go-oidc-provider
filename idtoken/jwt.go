@@ -72,14 +72,23 @@ func getKey(token *jwt.Token) (interface{}, error) {
 }
 
 func NewSignedJWT(tokens *map[utils.TokenType]*models.Token, alg ...string) (string, error) {
-	algorithm, key, err := loadSigningKey(alg...)
-	if err != nil {
-		return "", err
-	}
+	var algorithm string
+	var key interface{}
+	var err error
 
-	if algorithm == "" || key == nil {
-		log.Printf("no signing key available")
-		return "", fmt.Errorf("no signing key available")
+	if len(alg) > 0 && alg[0] == "none" {
+		algorithm = "none"
+		key = nil
+	} else {
+		algorithm, key, err = loadSigningKey(alg...)
+		if err != nil {
+			return "", err
+		}
+
+		if algorithm == "" || key == nil {
+			log.Printf("no signing key available")
+			return "", fmt.Errorf("no signing key available")
+		}
 	}
 
 	claims, err := NewClaims(tokens)
@@ -95,6 +104,16 @@ func NewSignedJWT(tokens *map[utils.TokenType]*models.Token, alg ...string) (str
 	}
 
 	token := jwt.NewWithClaims(signingMethod, claims)
+
+	if algorithm == "none" {
+		singingString, err := token.SigningString()
+		if err != nil {
+			log.Printf("Failed to create unsigned JWT: %v", err)
+			return "", fmt.Errorf("failed to create unsigned JWT")
+		}
+		return fmt.Sprintf("%s.", singingString), nil
+	}
+
 	signedToken, err := token.SignedString(key)
 	if err != nil {
 		log.Printf("Failed to sign JWT: %v", err)

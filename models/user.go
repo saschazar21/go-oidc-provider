@@ -208,6 +208,45 @@ func (u *User) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 	return nil
 }
 
+func (u *User) GetClaimsBasedOnScopes(scopes []utils.Scope) *User {
+	var user User
+	for _, scope := range scopes {
+		switch scope {
+		case utils.OPENID:
+			user.ID = u.ID
+		case utils.EMAIL:
+			user.Email = u.Email
+			user.IsEmailVerified = u.IsEmailVerified
+		case utils.PHONE:
+			user.PhoneNumber = u.PhoneNumber
+			user.IsPhoneNumberVerified = u.IsPhoneNumberVerified
+		case utils.ADDRESS:
+			user.Address = u.Address
+			user.Address.CreatedAt = nil // avoid marshaling zero value
+			user.Address.UpdatedAt = nil
+		case utils.PROFILE:
+			user.Name = u.Name
+			user.GivenName = u.GivenName
+			user.FamilyName = u.FamilyName
+			user.MiddleName = u.MiddleName
+			user.Nickname = u.Nickname
+			user.PreferredUsername = u.PreferredUsername
+			user.Birthdate = u.Birthdate
+			user.Zoneinfo = u.Zoneinfo
+			user.Locale = u.Locale
+			user.Picture = u.Picture
+			user.Profile = u.Profile
+			user.Website = u.Website
+			user.Gender = u.Gender
+		}
+	}
+
+	user.CreatedAt = nil // avoid marshaling zero value
+	user.UpdatedAt = nil
+
+	return &user
+}
+
 func (u *User) GetID() string {
 	if u.ID == uuid.Nil {
 		return ""

@@ -610,9 +610,16 @@ func TestTokenRequest(t *testing.T) {
 				req.PostForm = req.Form
 			}
 
-			_, err := ParseTokenRequest(req)
+			tr, err := ParseTokenRequest(req)
 			if (err != nil) != tt.WantErr {
 				t.Errorf("ParseTokenRequest() error = %v, wantErr %v", err, tt.WantErr)
+			}
+
+			if !tt.WantErr {
+				assert.NotNil(t, tr, "Expected non-nil TokenRequest")
+
+			} else {
+				assert.Nil(t, tr, "Expected nil TokenRequest on error")
 			}
 		})
 	}

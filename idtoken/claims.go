@@ -29,8 +29,8 @@ type Claims struct {
 	CodeHash        string           `json:"c_hash,omitempty"`
 	StateHash       string           `json:"s_hash,omitempty"`
 
-	*models.User
-	UpdatedAt *jwt.NumericDate `json:"updated_at,omitempty"` // prints the correct format for "profile" scope
+	*models.User `validate:"-"`   // Embedded user claims, no validation on the struct itself
+	UpdatedAt    *jwt.NumericDate `json:"updated_at,omitempty"` // prints the correct format for "profile" scope
 }
 
 func (c *Claims) populateClaimsFromToken(token *models.Token) error {
@@ -57,6 +57,11 @@ func (c *Claims) populateClaimsFromToken(token *models.Token) error {
 	c.ExpiresAt = utils.Epoch(token.ExpiresAt.ExpiresAt)
 	c.IssuedAt = utils.Epoch(token.CreatedAt.CreatedAt)
 
+	if token.Authorization.Client != nil && token.Authorization.Client.IDTokenLifetime > 0 {
+		// if client contains a custom ID token lifetime, override the expires_at claim
+		c.ExpiresAt = utils.Epoch(token.CreatedAt.CreatedAt.Add(time.Duration(token.Authorization.Client.IDTokenLifetime) * time.Second))
+	}
+
 	if token.Authorization.UserID == uuid.Nil {
 		return fmt.Errorf("user_id is not set in authorization")
 	}
@@ -76,51 +81,6 @@ func (c *Claims) populateClaimsFromToken(token *models.Token) error {
 		c.StateHash = enc
 	}
 
-	return nil
-}
-
-func (c *Claims) populateUserClaimsFromAuthorization(authorization *models.Authorization) error {
-	if authorization.User == nil {
-		return fmt.Errorf("user is not set in authorization")
-	}
-
-	var user models.User
-	for _, scope := range authorization.Scope {
-		switch scope {
-		case utils.OPENID:
-			user.ID = authorization.User.ID
-		case utils.EMAIL:
-			user.Email = authorization.User.Email
-			user.IsEmailVerified = authorization.User.IsEmailVerified
-		case utils.PHONE:
-			user.PhoneNumber = authorization.User.PhoneNumber
-			user.IsPhoneNumberVerified = authorization.User.IsPhoneNumberVerified
-		case utils.ADDRESS:
-			user.Address = authorization.User.Address
-			user.Address.CreatedAt = nil // avoid marshaling zero value
-			user.Address.UpdatedAt = nil
-		case utils.PROFILE:
-			user.Name = authorization.User.Name
-			user.GivenName = authorization.User.GivenName
-			user.FamilyName = authorization.User.FamilyName
-			user.MiddleName = authorization.User.MiddleName
-			user.Nickname = authorization.User.Nickname
-			user.PreferredUsername = authorization.User.PreferredUsername
-			user.Birthdate = authorization.User.Birthdate
-			user.Zoneinfo = authorization.User.Zoneinfo
-			user.Locale = authorization.User.Locale
-			user.Picture = authorization.User.Picture
-			user.Profile = authorization.User.Profile
-			user.Website = authorization.User.Website
-			user.Gender = authorization.User.Gender
-			c.UpdatedAt = jwt.NewNumericDate(authorization.User.UpdatedAt.UpdatedAt)
-		}
-	}
-
-	user.CreatedAt = nil // avoid marshaling zero value
-	user.UpdatedAt = nil
-
-	c.User = &user
 	return nil
 }
 
@@ -195,6 +155,10 @@ func validateTokens(tokens *map[utils.TokenType]*models.Token) error {
 		return fmt.Errorf("authorization must be set in access token")
 	}
 
+	if (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.User == nil {
+		return fmt.Errorf("user must be set in authorization")
+	}
+
 	if !utils.ContainsValue((*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Scope, utils.OPENID) {
 		return fmt.Errorf("authorization must contain openid scope")
 	}
@@ -228,9 +192,10 @@ func NewClaims(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
 		}
 
 		if token.Type == utils.ACCESS_TOKEN_TYPE {
-			if err := claims.populateUserClaimsFromAuthorization(token.Authorization); err != nil {
-				log.Printf("Failed to populate user claims from authorization: %v", err)
-				return nil, err
+			claims.User = token.Authorization.User.GetClaimsBasedOnScopes(token.Authorization.Scope)
+
+			if utils.ContainsValue(token.Authorization.Scope, utils.PROFILE) {
+				claims.UpdatedAt = jwt.NewNumericDate(token.Authorization.User.UpdatedAt.UpdatedAt.UTC())
 			}
 		}
 	}

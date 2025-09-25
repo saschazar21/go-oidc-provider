@@ -21,6 +21,8 @@ const (
 func TestJWT(t *testing.T) {
 	t.Setenv("ISSUER_URL", "http://localhost:8080")
 	t.Setenv("KEY_ES256", "LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUgxRUgxWlVHRXB0Ui80QmhMS2YwL2RTaDhidzRkL2E1U3QxSmdxZ2w5UjlvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFMzFEbzZtOWxhOEtGeWRER0JkRzV3KzVFQVM4QlZST1FhaWpzOU5LM3JJWUN6TjRCNk9lTAo1TU1NVnFhbXh6SXZMZEE3ZlhLZExWcytkMVBoc1diMUdRPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")
+	t.Setenv("KEY_HS256", "dGVzdAo=")
+	t.Setenv("KEY_EdDSA", "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUg2dlVOWDZyTGkxQ3lsODdvMmprY0pvbC8yUm80Zjh0Q1RtbWR1K2tkWXMKLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=")
 
 	ctx := context.Background()
 
@@ -69,19 +71,21 @@ func TestJWT(t *testing.T) {
 	pgContainer.Snapshot(ctx, postgres.WithSnapshotName(JWT_TEST_INIT))
 
 	type testStruct struct {
-		Name    string
-		PreHook func(ctx context.Context, db bun.IDB) *map[utils.TokenType]*models.Token
-		WantErr bool
+		Name       string
+		PreHook    func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token
+		WantKey    string
+		WantScopes []utils.Scope
+		WantErr    bool
 	}
 
 	tests := []testStruct{
 		{
-			Name: "Valid JWT",
-			PreHook: func(ctx context.Context, db bun.IDB) *map[utils.TokenType]*models.Token {
+			Name: "Valid JWT and ES256",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
 				tokens := make(map[utils.TokenType]*models.Token)
 				// Create a valid access token
-				authorization := auth                                                                 // create a copy to avoid modifying the original
-				authorization.Scope = []utils.Scope{"openid", "profile", "email", "address", "phone"} // request all scopes
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
 				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 				if err != nil {
 					t.Fatalf("Failed to create access token: %v", err)
@@ -89,7 +93,152 @@ func TestJWT(t *testing.T) {
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
-			WantErr: false,
+			WantKey:    "ES256",
+			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE, utils.EMAIL, utils.ADDRESS, utils.PHONE},
+			WantErr:    false,
+		},
+		{
+			Name: "Valid JWT with minimal scopes and HS256",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a valid access token
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create access token: %v", err)
+				}
+				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+				return &tokens
+			},
+			WantKey:    "HS256",
+			WantScopes: []utils.Scope{utils.OPENID},
+			WantErr:    false,
+		},
+		{
+			Name: "Valid JWT with minimal scopes and EdDSA",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a valid access token
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create access token: %v", err)
+				}
+				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+				return &tokens
+			},
+			WantKey:    "EdDSA",
+			WantScopes: []utils.Scope{utils.OPENID},
+			WantErr:    false,
+		},
+		{
+			Name: "Valid JWT with alg=none",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a valid access token
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create access token: %v", err)
+				}
+				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+				return &tokens
+			},
+			WantKey:    "none",
+			WantScopes: []utils.Scope{utils.OPENID},
+			WantErr:    false,
+		},
+		{
+			Name: "Valid JWT with minimal scopes and authorization_code",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a valid access token
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create access token: %v", err)
+				}
+				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+
+				// Create a valid authorization code
+				authCode, err := models.CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create authorization code: %v", err)
+				}
+				tokens[utils.AUTHORIZATION_CODE_TYPE] = authCode
+
+				return &tokens
+			},
+			WantKey:    "HS256",
+			WantScopes: []utils.Scope{utils.OPENID},
+			WantErr:    false,
+		},
+		{
+			Name: "Missing access token",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a refresh token only
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				refreshToken, err := models.CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create refresh token: %v", err)
+				}
+				tokens[utils.REFRESH_TOKEN_TYPE] = refreshToken
+				return &tokens
+			},
+			WantKey:    "HS256",
+			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
+			WantErr:    true,
+		},
+		{
+			Name: "Unsupported signing algorithm",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a valid access token
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create access token: %v", err)
+				}
+				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+				return &tokens
+			},
+			WantKey:    "RS256", // Assuming RS256 is not set up, hence falling back to default key
+			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
+			WantErr:    false,
+		},
+		{
+			Name: "Using default signing key",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a valid access token
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create access token: %v", err)
+				}
+				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+				return &tokens
+			},
+			WantKey:    "", // empty string to trigger default key usage
+			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
+			WantErr:    false,
+		},
+		{
+			Name: "No tokens provided",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				return &map[utils.TokenType]*models.Token{}
+			},
+			WantKey:    "HS256",
+			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
+			WantErr:    true,
 		},
 	}
 
@@ -104,10 +253,10 @@ func TestJWT(t *testing.T) {
 
 			var tokens *map[utils.TokenType]*models.Token
 			if tt.PreHook != nil {
-				tokens = tt.PreHook(ctx, conn)
+				tokens = tt.PreHook(ctx, conn, tt.WantScopes...)
 			}
 
-			jwt, err := NewSignedJWT(tokens, "ES256")
+			jwt, err := NewSignedJWT(tokens, tt.WantKey)
 			if (err != nil) != tt.WantErr {
 				t.Errorf("NewSignedJWT() error = %v, wantErr %v", err, tt.WantErr)
 				return
@@ -115,6 +264,10 @@ func TestJWT(t *testing.T) {
 
 			if !tt.WantErr {
 				assert.NotEmpty(t, jwt, "Expected non-empty JWT")
+
+				if tt.WantKey == "none" {
+					return // skip further checks for alg=none
+				}
 
 				claims, err := ParseJWT(jwt)
 				if err != nil {
@@ -129,8 +282,49 @@ func TestJWT(t *testing.T) {
 				assert.Equal(t, client.ID, claims.Audience[0], "Expected audience to match client ID")
 				assert.Equal(t, "http://localhost:8080", claims.Issuer, "Expected issuer to match")
 				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].CreatedAt.CreatedAt.Unix(), time.Time(claims.IssuedAt).Unix(), "Expected created_at to match")
-				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].ExpiresAt.ExpiresAt.Unix(), time.Time(claims.ExpiresAt).Unix(), "Expected expires_at to match")
+				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].CreatedAt.CreatedAt.Add(time.Duration(client.IDTokenLifetime)*time.Second).Unix(), time.Time(claims.ExpiresAt).Unix(), "Expected expires_at to match")
 				assert.ElementsMatch(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Scope, claims.Scope, "Expected scopes to match")
+
+				if _, ok := (*tokens)[utils.ACCESS_TOKEN_TYPE]; ok {
+					assert.NotEmpty(t, claims.AccessTokenHash, "Expected at_hash to be set")
+				}
+
+				if _, ok := (*tokens)[utils.AUTHORIZATION_CODE_TYPE]; ok {
+					assert.NotEmpty(t, claims.CodeHash, "Expected c_hash to be set")
+				}
+
+				for _, scope := range tt.WantScopes {
+					switch scope {
+					case utils.EMAIL:
+						assert.Equal(t, user.Email, claims.Email, "Expected email to match")
+						assert.Equal(t, user.IsEmailVerified, claims.IsEmailVerified, "Expected email_verified to match")
+					case utils.PHONE:
+						assert.Equal(t, user.PhoneNumber, claims.PhoneNumber, "Expected phone_number to match")
+						assert.Equal(t, user.IsPhoneNumberVerified, claims.IsPhoneNumberVerified, "Expected phone_number_verified to match")
+					case utils.ADDRESS:
+						if user.Address != nil {
+							assert.Equal(t, user.Address.Formatted, claims.Address.Formatted, "Expected address.formatted to match")
+							assert.Equal(t, user.Address.StreetAddress, claims.Address.StreetAddress, "Expected address.street_address to match")
+							assert.Equal(t, user.Address.Locality, claims.Address.Locality, "Expected address.locality to match")
+							assert.Equal(t, user.Address.Region, claims.Address.Region, "Expected address.region to match")
+						}
+					case utils.PROFILE:
+						assert.Equal(t, user.Name, claims.Name, "Expected name to match")
+						assert.Equal(t, user.GivenName, claims.GivenName, "Expected given_name to match")
+						assert.Equal(t, user.FamilyName, claims.FamilyName, "Expected family_name to match")
+						assert.Equal(t, user.MiddleName, claims.MiddleName, "Expected middle_name to match")
+						assert.Equal(t, user.Nickname, claims.Nickname, "Expected nickname to match")
+						assert.Equal(t, user.PreferredUsername, claims.PreferredUsername, "Expected preferred_username to match")
+						assert.Equal(t, user.Profile, claims.Profile, "Expected profile to match")
+						assert.Equal(t, user.Picture, claims.Picture, "Expected picture to match")
+						assert.Equal(t, user.Website, claims.Website, "Expected website to match")
+						assert.Equal(t, user.Birthdate, claims.Birthdate, "Expected birthdate to match")
+						assert.Equal(t, user.Gender, claims.Gender, "Expected gender to match")
+						assert.Equal(t, user.Zoneinfo, claims.Zoneinfo, "Expected zoneinfo to match")
+						assert.Equal(t, user.Locale, claims.Locale, "Expected locale to match")
+						assert.Equal(t, user.UpdatedAt.UpdatedAt.UTC().Unix(), claims.UpdatedAt.Unix(), "Expected updated_at to match")
+					}
+				}
 			}
 		})
 	}
