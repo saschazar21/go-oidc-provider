@@ -20,9 +20,19 @@ const (
 
 func TestJWT(t *testing.T) {
 	t.Setenv("ISSUER_URL", "http://localhost:8080")
-	t.Setenv("KEY_ES256", "LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUgxRUgxWlVHRXB0Ui80QmhMS2YwL2RTaDhidzRkL2E1U3QxSmdxZ2w5UjlvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFMzFEbzZtOWxhOEtGeWRER0JkRzV3KzVFQVM4QlZST1FhaWpzOU5LM3JJWUN6TjRCNk9lTAo1TU1NVnFhbXh6SXZMZEE3ZlhLZExWcytkMVBoc1diMUdRPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=")
+
+	es256, err := test.LoadTextFixture("ecdsa-p256.pem", true)
+	if err != nil {
+		t.Fatalf("Failed to load ecdsa-p256.pem: %v", err)
+	}
+	eddsa, err := test.LoadTextFixture("ed25519.pem", true)
+	if err != nil {
+		t.Fatalf("Failed to load ed25519.pem: %v", err)
+	}
+
+	t.Setenv("KEY_ES256", es256)
 	t.Setenv("KEY_HS256", "dGVzdAo=")
-	t.Setenv("KEY_EdDSA", "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1DNENBUUF3QlFZREsyVndCQ0lFSUg2dlVOWDZyTGkxQ3lsODdvMmprY0pvbC8yUm80Zjh0Q1RtbWR1K2tkWXMKLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=")
+	t.Setenv("KEY_EdDSA", eddsa)
 
 	ctx := context.Background()
 
@@ -90,6 +100,7 @@ func TestJWT(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create access token: %v", err)
 				}
+				accessToken.CreatedAt.CreatedAt = time.Now().UTC().Add(-5 * time.Second) // backdate to avoid timing issues with iat & nbf
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
@@ -108,6 +119,7 @@ func TestJWT(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create access token: %v", err)
 				}
+				accessToken.CreatedAt.CreatedAt = time.Now().UTC().Add(-5 * time.Second) // backdate to avoid timing issues with iat & nbf
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
@@ -126,6 +138,7 @@ func TestJWT(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create access token: %v", err)
 				}
+				accessToken.CreatedAt.CreatedAt = time.Now().UTC().Add(-5 * time.Second) // backdate to avoid timing issues with iat & nbf
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
@@ -144,6 +157,7 @@ func TestJWT(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create access token: %v", err)
 				}
+				accessToken.CreatedAt.CreatedAt = time.Now().UTC().Add(-5 * time.Second) // backdate to avoid timing issues with iat & nbf
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
@@ -162,6 +176,7 @@ func TestJWT(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create access token: %v", err)
 				}
+				accessToken.CreatedAt.CreatedAt = time.Now().UTC().Add(-5 * time.Second) // backdate to avoid timing issues with iat & nbf
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 
 				// Create a valid authorization code
@@ -175,6 +190,25 @@ func TestJWT(t *testing.T) {
 			},
 			WantKey:    "HS256",
 			WantScopes: []utils.Scope{utils.OPENID},
+			WantErr:    false,
+		},
+		{
+			Name: "Using default signing key",
+			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
+				tokens := make(map[utils.TokenType]*models.Token)
+				// Create a valid access token
+				authorization := auth // create a copy to avoid modifying the original
+				authorization.Scope = scopes
+				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
+				if err != nil {
+					t.Fatalf("Failed to create access token: %v", err)
+				}
+				accessToken.CreatedAt.CreatedAt = time.Now().UTC().Add(-5 * time.Second) // backdate to avoid timing issues with iat & nbf
+				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
+				return &tokens
+			},
+			WantKey:    "", // empty string to trigger default key usage
+			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
 			WantErr:    false,
 		},
 		{
@@ -210,24 +244,6 @@ func TestJWT(t *testing.T) {
 				return &tokens
 			},
 			WantKey:    "RS256", // Assuming RS256 is not set up, hence falling back to default key
-			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
-			WantErr:    false,
-		},
-		{
-			Name: "Using default signing key",
-			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
-				tokens := make(map[utils.TokenType]*models.Token)
-				// Create a valid access token
-				authorization := auth // create a copy to avoid modifying the original
-				authorization.Scope = scopes
-				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
-				if err != nil {
-					t.Fatalf("Failed to create access token: %v", err)
-				}
-				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
-				return &tokens
-			},
-			WantKey:    "", // empty string to trigger default key usage
 			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
 			WantErr:    false,
 		},

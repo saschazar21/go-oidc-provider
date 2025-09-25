@@ -114,6 +114,15 @@ func NewSignedJWT(tokens *map[utils.TokenType]*models.Token, alg ...string) (str
 		return fmt.Sprintf("%s.", singingString), nil
 	}
 
+	if !strings.HasPrefix(algorithm, "HS") {
+		jwk, err := PublicKeyToJWK(key, algorithm)
+		if err != nil {
+			log.Printf("Failed to convert public key to JWK: %v", err)
+			return "", fmt.Errorf("failed to convert public key to JWK")
+		}
+		token.Header["kid"] = jwk.Kid
+	}
+
 	signedToken, err := token.SignedString(key)
 	if err != nil {
 		log.Printf("Failed to sign JWT: %v", err)
