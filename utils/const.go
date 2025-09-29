@@ -3,6 +3,7 @@ package utils
 const (
 	COOKIE_AUTH_KEY_ENV = "COOKIE_AUTH_KEY"
 	COOKIE_ENC_KEY_ENV  = "COOKIE_ENC_KEY"
+	ISSUER_URL_ENV      = "ISSUER_URL"
 	MASTER_KEY_ENV      = "MASTER_KEY"
 
 	DEFAULT_DATE_FORMAT = "2006-01-02"
@@ -50,6 +51,19 @@ const (
 )
 
 const (
+	CLAIM_TYPE_NORMAL      ClaimType = "normal"
+	CLAIM_TYPE_AGGREGATED  ClaimType = "aggregated"
+	CLAIM_TYPE_DISTRIBUTED ClaimType = "distributed"
+)
+
+const (
+	PAGE  Display = "page"
+	POPUP Display = "popup"
+	TOUCH Display = "touch"
+	WAP   Display = "wap"
+)
+
+const (
 	AUTHORIZATION_CODE GrantType = "authorization_code"
 	IMPLICIT           GrantType = "implicit"
 	CLIENT_CREDENTIALS GrantType = "client_credentials"
@@ -69,6 +83,11 @@ const (
 	LOGIN          Prompt = "login"
 	CONSENT        Prompt = "consent"
 	SELECT_ACCOUNT Prompt = "select_account"
+)
+
+const (
+	QUERY    ResponseMode = "query"
+	FRAGMENT ResponseMode = "fragment"
 )
 
 const (
@@ -99,6 +118,31 @@ const (
 	UPDATE         Scope = "update"
 	DELETE         Scope = "delete"
 	OFFLINE_ACCESS Scope = "offline_access"
+)
+
+const (
+	HS256 SigningAlgorithm = "HS256"
+	HS384 SigningAlgorithm = "HS384"
+	HS512 SigningAlgorithm = "HS512"
+
+	RS256 SigningAlgorithm = "RS256"
+	RS384 SigningAlgorithm = "RS384"
+	RS512 SigningAlgorithm = "RS512"
+
+	ES256 SigningAlgorithm = "ES256"
+	ES384 SigningAlgorithm = "ES384"
+	ES512 SigningAlgorithm = "ES512"
+
+	PS256 SigningAlgorithm = "PS256"
+	PS384 SigningAlgorithm = "PS384"
+	PS512 SigningAlgorithm = "PS512"
+
+	EdDSA SigningAlgorithm = "EdDSA"
+)
+
+const (
+	PAIRWISE SubjectType = "pairwise"
+	PUBLIC   SubjectType = "public"
 )
 
 const (

@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/saschazar21/go-oidc-provider/errors"
-	"github.com/saschazar21/go-oidc-provider/idtoken"
+	"github.com/saschazar21/go-oidc-provider/helpers"
+	"github.com/saschazar21/go-oidc-provider/models"
+	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
-func HandleJWKS(w http.ResponseWriter, r *http.Request) {
-	// Implementation of the JWKS endpoint /.well-known/jwks.json
+func HandleOpenIDConfiguration(w http.ResponseWriter, r *http.Request) {
+	// Implementation of the OpenID Connect Discovery endpoint /.well-known/openid-configuration
 
 	switch r.Method {
 	case http.MethodOptions:
@@ -27,7 +28,7 @@ func HandleJWKS(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	case http.MethodGet:
-		handleJWKS(w, r)
+		handleOpenIDConfiguration(w, r)
 	default:
 		msg := "Unsupported request method. Only GET is allowed."
 		log.Printf("%s Got %s", msg, r.Method)
@@ -44,59 +45,32 @@ func HandleJWKS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleJWKS(w http.ResponseWriter, _ *http.Request) {
-	keys, err := idtoken.LoadKeys()
+func handleOpenIDConfiguration(w http.ResponseWriter, _ *http.Request) {
+	customConfig := &models.OpenIDConfiguration{
+		JWKSURI:               helpers.JWKS_ENDPOINT,
+		AuthorizationEndpoint: helpers.AUTHORIZATION_GRANT_ENDPOINT,
+		TokenEndpoint:         helpers.TOKEN_ENDPOINT,
+		UserInfoEndpoint:      helpers.USERINFO_ENDPOINT,
+		EndSessionEndpoint:    helpers.LOGOUT_ENDPOINT,
+		ResponseTypesSupported: []utils.ResponseType{
+			utils.CODE,
+			utils.ID_TOKEN,
+			utils.ID_TOKEN_TOKEN,
+		},
+	}
+
+	config, err := helpers.NewOpenIDConfiguration(customConfig)
 	if err != nil {
-		msg := "Failed to load JWKs"
-		log.Printf("%s: %v", msg, err)
-
-		err := errors.JSONError{
-			StatusCode:  http.StatusInternalServerError,
-			ErrorCode:   errors.SERVER_ERROR,
-			Description: &msg,
-		}
-
 		err.Write(w)
 		return
-	}
-
-	var jwks []interface{}
-
-	for alg, key := range keys {
-		if strings.HasPrefix(alg, "HS") {
-			// skip symmetric keys
-			continue
-		}
-
-		jwk, err := idtoken.PublicKeyToJWK(key, alg)
-		if err != nil {
-			msg := "Failed to convert public key to JWK"
-			log.Printf("%s: %v", msg, err)
-
-			err := errors.JSONError{
-				StatusCode:  http.StatusInternalServerError,
-				ErrorCode:   errors.SERVER_ERROR,
-				Description: &msg,
-			}
-
-			err.Write(w)
-			return
-		}
-		jwks = append(jwks, jwk)
-	}
-
-	resp := struct {
-		Keys []interface{} `json:"keys"`
-	}{
-		Keys: jwks,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		msg := "Failed to encode JWKS response to JSON"
+	if err := json.NewEncoder(w).Encode(config); err != nil {
+		msg := "Failed to encode OpenID configuration response to JSON"
 		log.Printf("%s: %v", msg, err)
 
 		err := errors.JSONError{

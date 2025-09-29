@@ -10,7 +10,7 @@ import (
 	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
-func loadSigningKey(alg ...string) (string, interface{}, error) {
+func loadSigningKey(token *models.Token) (string, interface{}, error) {
 	keys, err := LoadKeys()
 	if err != nil {
 		log.Printf("Keyring initialization failed: %v", err)
@@ -19,16 +19,17 @@ func loadSigningKey(alg ...string) (string, interface{}, error) {
 
 	var algorithm string
 	var key interface{}
-	if len(alg) > 0 {
-		for _, a := range alg {
-			if k, isExisting := keys[a]; isExisting {
-				algorithm = a
-				key = k
-				break
-			}
-		}
-		if algorithm == "" {
+	if token != nil && token.Authorization != nil && token.Authorization.Client != nil && token.Authorization.Client.IDTokenSignedResponseAlg != nil {
+		algorithm = string(*token.Authorization.Client.IDTokenSignedResponseAlg)
+		if k, ok := keys[algorithm]; ok {
+			key = k
+		} else if algorithm == "none" {
+			log.Printf("client requested \"none\", so no signing key will be used...")
+		} else {
 			log.Printf("no key found for any of the desired algorithms, falling back to default...")
+
+			algorithm = ""
+			key = nil
 		}
 	}
 
@@ -71,24 +72,23 @@ func getKey(token *jwt.Token) (interface{}, error) {
 	return key, nil
 }
 
-func NewSignedJWT(tokens *map[utils.TokenType]*models.Token, alg ...string) (string, error) {
+func NewSignedJWT(tokens *map[utils.TokenType]*models.Token) (string, error) {
 	var algorithm string
 	var key interface{}
 	var err error
 
-	if len(alg) > 0 && alg[0] == "none" {
-		algorithm = "none"
-		key = nil
-	} else {
-		algorithm, key, err = loadSigningKey(alg...)
-		if err != nil {
-			return "", err
-		}
+	if tokens == nil || len(*tokens) == 0 {
+		return "", fmt.Errorf("at least one token must be provided")
+	}
 
-		if algorithm == "" || key == nil {
-			log.Printf("no signing key available")
-			return "", fmt.Errorf("no signing key available")
-		}
+	algorithm, key, err = loadSigningKey((*tokens)[utils.ACCESS_TOKEN_TYPE])
+	if err != nil {
+		return "", err
+	}
+
+	if algorithm == "" || (algorithm != "none" && key == nil) {
+		log.Printf("no signing key available")
+		return "", fmt.Errorf("no signing key available")
 	}
 
 	claims, err := NewClaims(tokens)

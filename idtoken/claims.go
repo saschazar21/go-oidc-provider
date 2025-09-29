@@ -171,14 +171,14 @@ func NewClaims(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
 	}
 
 	var issuer string
-	if os.Getenv(ISSUER_URL_ENV) != "" {
-		issuer = os.Getenv(ISSUER_URL_ENV)
+	if os.Getenv(utils.ISSUER_URL_ENV) != "" {
+		issuer = os.Getenv(utils.ISSUER_URL_ENV)
 	} else {
 		issuer = utils.GetDeploymentURL()
 	}
 
 	if issuer == "" {
-		return nil, fmt.Errorf("issuer URL is not set, please set the %s environment variable", ISSUER_URL_ENV)
+		return nil, fmt.Errorf("issuer URL is not set, please set the %s environment variable", utils.ISSUER_URL_ENV)
 	}
 
 	claims := Claims{

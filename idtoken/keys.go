@@ -7,29 +7,31 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
 var _keys map[string]interface{}
 
-func loadKey(alg string) (interface{}, error) {
-	key := os.Getenv("KEY_" + alg)
+func loadKey(alg utils.SigningAlgorithm) (interface{}, error) {
+	key := os.Getenv("KEY_" + string(alg))
 
 	if key == "" {
 		return nil, nil
 	}
 
 	switch alg {
-	case HS256, HS384, HS512:
+	case utils.HS256, utils.HS384, utils.HS512:
 		// HMAC uses a shared secret key
 		// In a real implementation, you would retrieve this from a secure location
 		return decodeHMACSecretFromBase64(key)
-	case RS256, RS384, RS512:
+	case utils.RS256, utils.RS384, utils.RS512:
 		// RSA uses a private key for signing and a public key for verification
 		return decodeRSAPrivateKeyFromBase64(key)
-	case ES256, ES384, ES512:
+	case utils.ES256, utils.ES384, utils.ES512:
 		// ECDSA uses a private key for signing and a public key for verification
 		return decodeECDSAPrivateKeyFromBase64(key)
-	case EdDSA:
+	case utils.EdDSA:
 		// EdDSA uses an Ed25519 private key for signing and a public key for verification
 		return decodeEd25519PrivateKeyFromBase64(key)
 	default:
@@ -44,12 +46,12 @@ func LoadKeys() (map[string]interface{}, error) {
 
 	_keys = make(map[string]interface{})
 
-	algorithms := []string{
-		ES256, ES384, ES512,
-		RS256, RS384, RS512,
-		PS256, PS384, PS512,
-		EdDSA,
-		HS256, HS384, HS512,
+	algorithms := []utils.SigningAlgorithm{
+		utils.ES256, utils.ES384, utils.ES512,
+		utils.RS256, utils.RS384, utils.RS512,
+		utils.PS256, utils.PS384, utils.PS512,
+		utils.EdDSA,
+		utils.HS256, utils.HS384, utils.HS512,
 	}
 
 	for _, alg := range algorithms {
@@ -62,7 +64,7 @@ func LoadKeys() (map[string]interface{}, error) {
 			log.Printf("No key found for algorithm %s", alg)
 			continue
 		}
-		_keys[alg] = key
+		_keys[string(alg)] = key
 	}
 
 	if len(_keys) == 0 {

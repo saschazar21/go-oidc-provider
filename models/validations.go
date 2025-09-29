@@ -148,6 +148,12 @@ func (m *MagicLinkWhitelist) Validate() (err error) {
 	return
 }
 
+func (o *OpenIDConfiguration) Validate() (err error) {
+	err = utils.NewCustomValidator().Struct(o)
+
+	return
+}
+
 func (s *Session) Validate() (err error) {
 	err = utils.NewCustomValidator().Struct(s)
 

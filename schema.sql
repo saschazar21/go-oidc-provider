@@ -66,6 +66,23 @@ CREATE TYPE oidc_standard_scope AS ENUM (
     'offline_access'
 );
 
+CREATE TYPE oidc_id_token_signed_response_alg AS ENUM (
+    'none',   -- No signing
+    'HS256',  -- HMAC with SHA-256
+    'HS384',  -- HMAC with SHA-384
+    'HS512',  -- HMAC with SHA-512
+    'RS256',  -- RSA with SHA-256
+    'RS384',  -- RSA with SHA-384
+    'RS512',  -- RSA with SHA-512
+    'ES256',  -- ECDSA with P-256 and SHA-256
+    'ES384',  -- ECDSA with P-384 and SHA-384
+    'ES512',  -- ECDSA with P-521 and SHA-512
+    'PS256',  -- RSASSA-PSS with SHA-256
+    'PS384',  -- RSASSA-PSS with SHA-384
+    'PS512',  -- RSASSA-PSS with SHA-512
+    'EdDSA'   -- Edwards-curve Digital Signature Algorithm (Ed25519)
+);
+
 -- Tables
 
 CREATE TABLE oidc_users (
@@ -143,6 +160,7 @@ CREATE TABLE oidc_clients (
     access_token_lifetime INT DEFAULT 3600, -- 1 hour
     refresh_token_lifetime INT DEFAULT 86400, -- 24 hours
     id_token_lifetime INT DEFAULT 300, -- 5 minutes
+    id_token_signed_response_alg oidc_id_token_signed_response_alg,
     
     -- Metadata
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

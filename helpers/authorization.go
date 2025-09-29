@@ -130,7 +130,7 @@ func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, 
 		log.Printf("Prompt is set to 'login', redirecting to login page")
 		return errors.InternalRedirectError{
 			StatusCode: ar.getCorrectRedirectStatusCode(),
-			Location:   LOGIN_PATH,
+			Location:   LOGIN_ENDPOINT,
 		}
 	}
 

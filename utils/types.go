@@ -23,6 +23,8 @@ type Validatable interface {
 
 type AuthMethod string
 type AuthStatus string
+type ClaimType string
+type Display string
 
 type EncryptedDate struct {
 	time.Time
@@ -225,6 +227,8 @@ type PKCEMethod string
 
 type Prompt string
 
+type ResponseMode string
+
 type ResponseType string
 
 type Result string
@@ -266,5 +270,9 @@ func (s *ScopeSlice) UnmarshalJSON(data []byte) error {
 	*s = scopes
 	return nil
 }
+
+type SigningAlgorithm string
+
+type SubjectType string
 
 type TokenType string

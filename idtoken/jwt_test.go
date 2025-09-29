@@ -29,10 +29,15 @@ func TestJWT(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load ed25519.pem: %v", err)
 	}
+	rs256, err := test.LoadTextFixture("rsa2048.pem", true)
+	if err != nil {
+		t.Fatalf("Failed to load rsa2048.pem: %v", err)
+	}
 
 	t.Setenv("KEY_ES256", es256)
 	t.Setenv("KEY_HS256", "dGVzdAo=")
 	t.Setenv("KEY_EdDSA", eddsa)
+	t.Setenv("KEY_RS256", rs256)
 
 	ctx := context.Background()
 
@@ -83,7 +88,6 @@ func TestJWT(t *testing.T) {
 	type testStruct struct {
 		Name       string
 		PreHook    func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token
-		WantKey    string
 		WantScopes []utils.Scope
 		WantErr    bool
 	}
@@ -93,8 +97,12 @@ func TestJWT(t *testing.T) {
 			Name: "Valid JWT and ES256",
 			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
 				tokens := make(map[utils.TokenType]*models.Token)
+				alg := utils.SigningAlgorithm("ES256")
 				// Create a valid access token
+				client := client // create a copy to avoid modifying the original
+				client.IDTokenSignedResponseAlg = &alg
 				authorization := auth // create a copy to avoid modifying the original
+				authorization.Client = &client
 				authorization.Scope = scopes
 				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 				if err != nil {
@@ -104,7 +112,6 @@ func TestJWT(t *testing.T) {
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
-			WantKey:    "ES256",
 			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE, utils.EMAIL, utils.ADDRESS, utils.PHONE},
 			WantErr:    false,
 		},
@@ -112,8 +119,12 @@ func TestJWT(t *testing.T) {
 			Name: "Valid JWT with minimal scopes and HS256",
 			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
 				tokens := make(map[utils.TokenType]*models.Token)
+				alg := utils.SigningAlgorithm("HS256")
 				// Create a valid access token
+				client := client // create a copy to avoid modifying the original
+				client.IDTokenSignedResponseAlg = &alg
 				authorization := auth // create a copy to avoid modifying the original
+				authorization.Client = &client
 				authorization.Scope = scopes
 				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 				if err != nil {
@@ -123,7 +134,6 @@ func TestJWT(t *testing.T) {
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
-			WantKey:    "HS256",
 			WantScopes: []utils.Scope{utils.OPENID},
 			WantErr:    false,
 		},
@@ -131,8 +141,12 @@ func TestJWT(t *testing.T) {
 			Name: "Valid JWT with minimal scopes and EdDSA",
 			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
 				tokens := make(map[utils.TokenType]*models.Token)
+				alg := utils.SigningAlgorithm("EdDSA")
 				// Create a valid access token
+				client := client // create a copy to avoid modifying the original
+				client.IDTokenSignedResponseAlg = &alg
 				authorization := auth // create a copy to avoid modifying the original
+				authorization.Client = &client
 				authorization.Scope = scopes
 				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 				if err != nil {
@@ -142,7 +156,6 @@ func TestJWT(t *testing.T) {
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
-			WantKey:    "EdDSA",
 			WantScopes: []utils.Scope{utils.OPENID},
 			WantErr:    false,
 		},
@@ -150,8 +163,12 @@ func TestJWT(t *testing.T) {
 			Name: "Valid JWT with alg=none",
 			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
 				tokens := make(map[utils.TokenType]*models.Token)
+				alg := utils.SigningAlgorithm("none")
 				// Create a valid access token
+				client := client // create a copy to avoid modifying the original
+				client.IDTokenSignedResponseAlg = &alg
 				authorization := auth // create a copy to avoid modifying the original
+				authorization.Client = &client
 				authorization.Scope = scopes
 				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 				if err != nil {
@@ -161,7 +178,6 @@ func TestJWT(t *testing.T) {
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
-			WantKey:    "none",
 			WantScopes: []utils.Scope{utils.OPENID},
 			WantErr:    false,
 		},
@@ -188,7 +204,6 @@ func TestJWT(t *testing.T) {
 
 				return &tokens
 			},
-			WantKey:    "HS256",
 			WantScopes: []utils.Scope{utils.OPENID},
 			WantErr:    false,
 		},
@@ -207,7 +222,6 @@ func TestJWT(t *testing.T) {
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
-			WantKey:    "", // empty string to trigger default key usage
 			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
 			WantErr:    false,
 		},
@@ -225,7 +239,6 @@ func TestJWT(t *testing.T) {
 				tokens[utils.REFRESH_TOKEN_TYPE] = refreshToken
 				return &tokens
 			},
-			WantKey:    "HS256",
 			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
 			WantErr:    true,
 		},
@@ -233,8 +246,12 @@ func TestJWT(t *testing.T) {
 			Name: "Unsupported signing algorithm",
 			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
 				tokens := make(map[utils.TokenType]*models.Token)
+				alg := utils.SigningAlgorithm("HS512") // not configured
 				// Create a valid access token
+				client := client // create a copy to avoid modifying the original
+				client.IDTokenSignedResponseAlg = &alg
 				authorization := auth // create a copy to avoid modifying the original
+				authorization.Client = &client
 				authorization.Scope = scopes
 				accessToken, err := models.CreateToken(ctx, db, string(utils.ACCESS_TOKEN_TYPE), &authorization)
 				if err != nil {
@@ -243,7 +260,6 @@ func TestJWT(t *testing.T) {
 				tokens[utils.ACCESS_TOKEN_TYPE] = accessToken
 				return &tokens
 			},
-			WantKey:    "RS256", // Assuming RS256 is not set up, hence falling back to default key
 			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
 			WantErr:    false,
 		},
@@ -252,7 +268,6 @@ func TestJWT(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB, scopes ...utils.Scope) *map[utils.TokenType]*models.Token {
 				return &map[utils.TokenType]*models.Token{}
 			},
-			WantKey:    "HS256",
 			WantScopes: []utils.Scope{utils.OPENID, utils.PROFILE},
 			WantErr:    true,
 		},
@@ -272,7 +287,7 @@ func TestJWT(t *testing.T) {
 				tokens = tt.PreHook(ctx, conn, tt.WantScopes...)
 			}
 
-			jwt, err := NewSignedJWT(tokens, tt.WantKey)
+			jwt, err := NewSignedJWT(tokens)
 			if (err != nil) != tt.WantErr {
 				t.Errorf("NewSignedJWT() error = %v, wantErr %v", err, tt.WantErr)
 				return
@@ -280,8 +295,7 @@ func TestJWT(t *testing.T) {
 
 			if !tt.WantErr {
 				assert.NotEmpty(t, jwt, "Expected non-empty JWT")
-
-				if tt.WantKey == "none" {
+				if (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Client.IDTokenSignedResponseAlg != nil && *(*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Client.IDTokenSignedResponseAlg == "none" {
 					return // skip further checks for alg=none
 				}
 

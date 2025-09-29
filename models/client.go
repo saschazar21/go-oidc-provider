@@ -38,9 +38,10 @@ type Client struct {
 	IsAuthTimeRequired bool `json:"require_auth_time,omitempty" bun:"require_auth_time"`    // Whether the client requires auth time
 	IsPKCERequired     bool `json:"require_pkce,omitempty" bun:"require_pkce,default:true"` // Whether the client requires PKCE
 
-	AccessTokenLifetime  int64 `json:"access_token_lifetime" validate:"omitempty,gt=0" bun:"access_token_lifetime,default:3600"`              // Lifetime of access tokens in seconds
-	RefreshTokenLifetime int64 `json:"refresh_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"refresh_token_lifetime,default:86400"` // Lifetime of refresh tokens in seconds
-	IDTokenLifetime      int64 `json:"id_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"id_token_lifetime,default:300"`             // Lifetime of ID tokens in seconds
+	AccessTokenLifetime      int64                   `json:"access_token_lifetime" validate:"omitempty,gt=0" bun:"access_token_lifetime,default:3600"`              // Lifetime of access tokens in seconds
+	RefreshTokenLifetime     int64                   `json:"refresh_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"refresh_token_lifetime,default:86400"` // Lifetime of refresh tokens in seconds
+	IDTokenLifetime          int64                   `json:"id_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"id_token_lifetime,default:300"`             // Lifetime of ID tokens in seconds
+	IDTokenSignedResponseAlg *utils.SigningAlgorithm `json:"id_token_signed_response_alg,omitempty" validate:"omitempty,jws" bun:"id_token_signed_response_alg"`    // Signing algorithm for ID tokens
 
 	IsActive       *bool `json:"is_active" bun:"is_active,default:true"`              // Whether the client is active
 	IsConfidential *bool `json:"is_confidential" bun:"is_confidential,default:false"` // Whether the client is confidential

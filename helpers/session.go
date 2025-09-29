@@ -42,7 +42,7 @@ func getSessionIdFromCookie(w http.ResponseWriter, r *http.Request) (string, err
 
 		return "", errors.InternalRedirectError{
 			StatusCode: statusCode,
-			Location:   LOGIN_PATH,
+			Location:   LOGIN_ENDPOINT,
 		}
 	}
 
@@ -57,7 +57,7 @@ func getSessionIdFromCookie(w http.ResponseWriter, r *http.Request) (string, err
 
 		return "", errors.InternalRedirectError{
 			StatusCode: statusCode,
-			Location:   LOGIN_PATH,
+			Location:   LOGIN_ENDPOINT,
 		}
 	}
 
@@ -87,7 +87,7 @@ func ParseSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *htt
 
 		return nil, errors.InternalRedirectError{
 			StatusCode: http.StatusFound,
-			Location:   LOGIN_PATH,
+			Location:   LOGIN_ENDPOINT,
 		}
 	}
 
