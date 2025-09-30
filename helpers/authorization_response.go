@@ -118,6 +118,19 @@ func (ar *authorizationResponse) populateResponse(ctx context.Context, db bun.ID
 			return err
 		}
 		ar.IsFragment = true
+	case utils.ID_TOKEN_TOKEN:
+		tokens, err := ar.createTokens(ctx, db, &[]utils.TokenType{utils.ACCESS_TOKEN_TYPE})
+		if err != nil {
+			return err
+		}
+
+		jwt, err := ar.createJWT(tokens)
+		if err != nil {
+			return err
+		}
+
+		ar.IDToken = jwt
+		ar.IsFragment = true
 	case utils.CODE_ID_TOKEN:
 		tokens, err := ar.createTokens(ctx, db, &[]utils.TokenType{utils.AUTHORIZATION_CODE_TYPE})
 		if err != nil {

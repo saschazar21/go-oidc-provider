@@ -157,8 +157,17 @@ func NewSignedJWTFromTokens(tokens *map[utils.TokenType]*models.Token) (string, 
 		return "", fmt.Errorf("failed to create claims for ID token")
 	}
 
+	var auth *models.Authorization
+	if _, ok := (*tokens)[utils.ACCESS_TOKEN_TYPE]; ok {
+		auth = (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization
+	} else if _, ok := (*tokens)[utils.AUTHORIZATION_CODE_TYPE]; ok {
+		auth = (*tokens)[utils.AUTHORIZATION_CODE_TYPE].Authorization
+	} else {
+		return "", fmt.Errorf("at least one token must be of type access_token or authorization_code")
+	}
+
 	token := &idToken{
-		Authorization: (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization,
+		Authorization: auth,
 	}
 
 	return token.encode(claims)

@@ -49,6 +49,10 @@ func TestAuthorizationResponse(t *testing.T) {
 	auth.ClientID = client.ID
 	auth.Client = client
 
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Failed to close connection: %v", err)
+	}
+
 	pgContainer.Snapshot(ctx, postgres.WithSnapshotName(AUTHORIZATION_RESPONSE_INIT))
 
 	type testStruct struct {
@@ -61,11 +65,63 @@ func TestAuthorizationResponse(t *testing.T) {
 		{
 			name: "Valid authorization response",
 			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
-				authorization := auth
+				authorization := *auth
 				if err := authorization.Save(ctx, db); err != nil {
 					t.Fatalf("Failed to save authorization fixture: %v", err)
 				}
-				return authorization
+				return &authorization
+			},
+			wantErr: false,
+		},
+		{
+			name: "Implicit flow without nonce and with id_token",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.ID_TOKEN}
+				if err := client.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save client fixture: %v", err)
+				}
+
+				authorization := *auth
+				authorization.ResponseType = utils.ID_TOKEN
+				authorization.Nonce = nil
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save authorization fixture: %v", err)
+				}
+				return &authorization
+			},
+			wantErr: false,
+		},
+		{
+			name: "Implicit flow with nonce	and id_token token",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.ID_TOKEN_TOKEN}
+				if err := client.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save client fixture: %v", err)
+				}
+				authorization := *auth
+				authorization.ResponseType = utils.ID_TOKEN_TOKEN
+				authorization.Nonce = auth.Nonce
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save authorization fixture: %v", err)
+				}
+				return &authorization
+			},
+			wantErr: false,
+		},
+		{
+			name: "Hybrid flow without nonce and with code id_token",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.CODE_ID_TOKEN}
+				if err := client.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save client fixture: %v", err)
+				}
+				authorization := *auth
+				authorization.ResponseType = utils.CODE_ID_TOKEN
+				authorization.Nonce = nil
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save authorization fixture: %v", err)
+				}
+				return &authorization
 			},
 			wantErr: false,
 		},
@@ -103,30 +159,36 @@ func TestAuthorizationResponse(t *testing.T) {
 					assert.NotEmpty(t, ar.Code, "Expected authorization code to be set")
 					assert.Empty(t, ar.IDToken, "Expected ID token to be empty")
 					assert.Empty(t, ar.AccessToken, "Expected access token to be empty")
+					assert.False(t, ar.IsFragment, "Expected IsFragment to be false")
 				case utils.ID_TOKEN:
 					assert.NotEmpty(t, ar.IDToken, "Expected ID token to be set")
 					assert.Empty(t, ar.Code, "Expected authorization code to be empty")
 					assert.Empty(t, ar.AccessToken, "Expected access token to be empty")
+					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
 				case utils.TOKEN:
 					assert.NotEmpty(t, ar.AccessToken, "Expected access token to be set")
 					assert.Equal(t, ar.TokenType, "Bearer", "Expected token type to be set")
 					assert.Empty(t, ar.Code, "Expected authorization code to be empty")
 					assert.Empty(t, ar.IDToken, "Expected ID token to be empty")
+					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
 				case utils.CODE_ID_TOKEN:
 					assert.NotEmpty(t, ar.Code, "Expected authorization code to be set")
 					assert.NotEmpty(t, ar.IDToken, "Expected ID token to be set")
 					assert.Empty(t, ar.AccessToken, "Expected access token to be empty")
+					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
 				case utils.CODE_TOKEN:
 					assert.NotEmpty(t, ar.Code, "Expected authorization code to be set")
 					assert.NotEmpty(t, ar.AccessToken, "Expected access token to be set")
 					assert.Equal(t, ar.TokenType, "Bearer", "Expected token type to be set")
 					assert.Empty(t, ar.IDToken, "Expected ID token to be empty")
 					assert.Empty(t, ar.Code, "Expected authorization code to be empty")
+					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
 				case utils.CODE_ID_TOKEN_TOKEN:
 					assert.NotEmpty(t, ar.Code, "Expected authorization code to be set")
 					assert.NotEmpty(t, ar.AccessToken, "Expected access token to be set")
 					assert.Equal(t, ar.TokenType, "Bearer", "Expected token type to be set")
 					assert.NotEmpty(t, ar.IDToken, "Expected ID token to be set")
+					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
 				}
 			}
 		})
