@@ -287,7 +287,7 @@ func TestJWT(t *testing.T) {
 				tokens = tt.PreHook(ctx, conn, tt.WantScopes...)
 			}
 
-			jwt, err := NewSignedJWT(tokens)
+			jwt, err := NewSignedJWTFromTokens(tokens)
 			if (err != nil) != tt.WantErr {
 				t.Errorf("NewSignedJWT() error = %v, wantErr %v", err, tt.WantErr)
 				return
@@ -311,8 +311,6 @@ func TestJWT(t *testing.T) {
 				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.UserID.String(), subject, "Expected subject to match user ID")
 				assert.Equal(t, client.ID, claims.Audience[0], "Expected audience to match client ID")
 				assert.Equal(t, "http://localhost:8080", claims.Issuer, "Expected issuer to match")
-				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].CreatedAt.CreatedAt.Unix(), time.Time(claims.IssuedAt).Unix(), "Expected created_at to match")
-				assert.Equal(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].CreatedAt.CreatedAt.Add(time.Duration(client.IDTokenLifetime)*time.Second).Unix(), time.Time(claims.ExpiresAt).Unix(), "Expected expires_at to match")
 				assert.ElementsMatch(t, (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Scope, claims.Scope, "Expected scopes to match")
 
 				if _, ok := (*tokens)[utils.ACCESS_TOKEN_TYPE]; ok {

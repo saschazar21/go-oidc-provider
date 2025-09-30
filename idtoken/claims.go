@@ -52,35 +52,6 @@ func (c *Claims) populateClaimsFromToken(token *models.Token) error {
 		return nil
 	}
 
-	c.Scope = token.Authorization.Scope
-	c.NotBefore = utils.Epoch(token.CreatedAt.CreatedAt)
-	c.ExpiresAt = utils.Epoch(token.ExpiresAt.ExpiresAt)
-	c.IssuedAt = utils.Epoch(token.CreatedAt.CreatedAt)
-
-	if token.Authorization.Client != nil && token.Authorization.Client.IDTokenLifetime > 0 {
-		// if client contains a custom ID token lifetime, override the expires_at claim
-		c.ExpiresAt = utils.Epoch(token.CreatedAt.CreatedAt.Add(time.Duration(token.Authorization.Client.IDTokenLifetime) * time.Second))
-	}
-
-	if token.Authorization.UserID == uuid.Nil {
-		return fmt.Errorf("user_id is not set in authorization")
-	}
-
-	if token.Authorization.ClientID != "" {
-		c.Audience = jwt.ClaimStrings{token.Authorization.ClientID}
-	}
-
-	if token.Authorization.Nonce != nil && *token.Authorization.Nonce != "" {
-		c.Nonce = *token.Authorization.Nonce
-	}
-
-	if token.Authorization.State != nil && *token.Authorization.State != "" {
-		hash := utils.HashS256([]byte(*token.Authorization.State))
-		enc := base64.RawURLEncoding.EncodeToString(hash[:len(hash)/2])
-
-		c.StateHash = enc
-	}
-
 	return nil
 }
 
@@ -142,32 +113,21 @@ func (c *Claims) GetIssuer() (string, error) {
 	return c.Issuer, nil
 }
 
-func validateTokens(tokens *map[utils.TokenType]*models.Token) error {
-	if tokens == nil || len(*tokens) == 0 {
-		return fmt.Errorf("tokens must be set")
+func NewClaimsFromAuthorization(auth *models.Authorization) (*Claims, error) {
+	if auth == nil {
+		return nil, fmt.Errorf("no authorization data provided")
 	}
 
-	if _, ok := (*tokens)[utils.ACCESS_TOKEN_TYPE]; !ok {
-		return fmt.Errorf("access token must be set")
+	if auth.User == nil {
+		return nil, fmt.Errorf("user must be set in authorization")
 	}
 
-	if (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization == nil {
-		return fmt.Errorf("authorization must be set in access token")
+	if auth.Client == nil {
+		return nil, fmt.Errorf("client must be set in authorization")
 	}
 
-	if (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.User == nil {
-		return fmt.Errorf("user must be set in authorization")
-	}
-
-	if !utils.ContainsValue((*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization.Scope, utils.OPENID) {
-		return fmt.Errorf("authorization must contain openid scope")
-	}
-	return nil
-}
-
-func NewClaims(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
-	if err := validateTokens(tokens); err != nil {
-		return nil, err
+	if !utils.ContainsValue(auth.Scope, utils.OPENID) {
+		return nil, fmt.Errorf("authorization must contain openid scope")
 	}
 
 	var issuer string
@@ -185,20 +145,67 @@ func NewClaims(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
 		Issuer: issuer,
 	}
 
+	now := time.Now().UTC()
+	claims.IssuedAt = utils.Epoch(now)
+	claims.NotBefore = utils.Epoch(now)
+
+	lifetime := DEFAULT_ID_TOKEN_LIFETIME
+	if auth.Client.IDTokenLifetime > 0 {
+		lifetime = auth.Client.IDTokenLifetime
+	}
+
+	claims.ExpiresAt = utils.Epoch(now.Add(time.Duration(lifetime) * time.Second))
+
+	if auth.ClientID != "" {
+		claims.Audience = jwt.ClaimStrings{auth.ClientID}
+	}
+
+	claims.Scope = auth.Scope
+	claims.User = auth.User.GetClaimsBasedOnScopes(auth.Scope)
+
+	if utils.ContainsValue(auth.Scope, utils.PROFILE) {
+		claims.UpdatedAt = jwt.NewNumericDate(auth.User.UpdatedAt.UpdatedAt)
+	}
+
+	if auth.Nonce != nil && *auth.Nonce != "" {
+		claims.Nonce = *auth.Nonce
+	}
+
+	if auth.State != nil && *auth.State != "" {
+		hash := utils.HashS256([]byte(*auth.State))
+		enc := base64.RawURLEncoding.EncodeToString(hash[:len(hash)/2])
+
+		claims.StateHash = enc
+	}
+
+	return &claims, nil
+}
+
+func NewClaimsFromTokens(tokens *map[utils.TokenType]*models.Token) (*Claims, error) {
+	if tokens == nil || len(*tokens) == 0 {
+		return nil, fmt.Errorf("tokens must be set")
+	}
+
+	var auth *models.Authorization
+	if _, ok := (*tokens)[utils.ACCESS_TOKEN_TYPE]; ok {
+		auth = (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization
+	} else if _, ok := (*tokens)[utils.AUTHORIZATION_CODE_TYPE]; ok {
+		auth = (*tokens)[utils.AUTHORIZATION_CODE_TYPE].Authorization
+	} else {
+		return nil, fmt.Errorf("at least one token must be of type access_token or authorization_code")
+	}
+
+	claims, err := NewClaimsFromAuthorization(auth)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, token := range *tokens {
 		if err := claims.populateClaimsFromToken(token); err != nil {
 			log.Printf("Failed to populate claims from %s: %v", token.Type, err)
 			return nil, err
 		}
-
-		if token.Type == utils.ACCESS_TOKEN_TYPE {
-			claims.User = token.Authorization.User.GetClaimsBasedOnScopes(token.Authorization.Scope)
-
-			if utils.ContainsValue(token.Authorization.Scope, utils.PROFILE) {
-				claims.UpdatedAt = jwt.NewNumericDate(token.Authorization.User.UpdatedAt.UpdatedAt.UTC())
-			}
-		}
 	}
 
-	return &claims, nil
+	return claims, nil
 }

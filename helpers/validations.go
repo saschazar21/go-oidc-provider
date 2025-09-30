@@ -63,6 +63,12 @@ func (ar *authorizationRequest) Validate() errors.OIDCError {
 	return nil
 }
 
+func (ar *authorizationResponse) Validate() (err error) {
+	err = utils.NewCustomValidator().Struct(ar)
+
+	return
+}
+
 func (cr *createMagicLinkTokenRequest) Validate() (err error) {
 	err = utils.NewCustomValidator().Struct(cr)
 

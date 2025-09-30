@@ -10,17 +10,24 @@ import (
 	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
-func loadSigningKey(token *models.Token) (string, interface{}, error) {
+type idToken struct {
+	alg string
+	key interface{}
+
+	*models.Authorization
+}
+
+func (i *idToken) loadSigningKey(client *models.Client) error {
 	keys, err := LoadKeys()
 	if err != nil {
 		log.Printf("Keyring initialization failed: %v", err)
-		return "", nil, fmt.Errorf("keyring initialization failed")
+		return fmt.Errorf("keyring initialization failed")
 	}
 
 	var algorithm string
 	var key interface{}
-	if token != nil && token.Authorization != nil && token.Authorization.Client != nil && token.Authorization.Client.IDTokenSignedResponseAlg != nil {
-		algorithm = string(*token.Authorization.Client.IDTokenSignedResponseAlg)
+	if client != nil && client.IDTokenSignedResponseAlg != nil {
+		algorithm = string(*client.IDTokenSignedResponseAlg)
 		if k, ok := keys[algorithm]; ok {
 			key = k
 		} else if algorithm == "none" {
@@ -41,7 +48,56 @@ func loadSigningKey(token *models.Token) (string, interface{}, error) {
 			break
 		}
 	}
-	return algorithm, key, nil
+
+	i.alg = algorithm
+	i.key = key
+
+	return nil
+}
+
+func (i *idToken) encode(claims *Claims) (string, error) {
+	if err := i.loadSigningKey(i.Authorization.Client); err != nil {
+		return "", err
+	}
+
+	if i.alg == "" || (i.alg != "none" && i.key == nil) {
+		log.Printf("no signing key available")
+		return "", fmt.Errorf("no signing key available")
+	}
+
+	signingMethod := jwt.GetSigningMethod(i.alg)
+	if signingMethod == nil {
+		log.Printf("Unsupported signing algorithm: %s", i.alg)
+		return "", fmt.Errorf("unsupported signing algorithm: %s", i.alg)
+	}
+
+	jwt := jwt.NewWithClaims(signingMethod, claims)
+
+	if i.alg == "none" {
+		singingString, err := jwt.SigningString()
+		if err != nil {
+			log.Printf("Failed to create unsigned JWT: %v", err)
+			return "", fmt.Errorf("failed to create unsigned JWT")
+		}
+		return fmt.Sprintf("%s.", singingString), nil
+	}
+
+	if !strings.HasPrefix(i.alg, "HS") {
+		jwk, err := PublicKeyToJWK(i.key, i.alg)
+		if err != nil {
+			log.Printf("Failed to convert public key to JWK: %v", err)
+			return "", fmt.Errorf("failed to convert public key to JWK")
+		}
+		jwt.Header["kid"] = jwk.Kid
+	}
+
+	signedToken, err := jwt.SignedString(i.key)
+	if err != nil {
+		log.Printf("Failed to sign JWT: %v", err)
+		return "", fmt.Errorf("failed to sign JWT")
+	}
+
+	return signedToken, nil
 }
 
 func getKey(token *jwt.Token) (interface{}, error) {
@@ -72,64 +128,40 @@ func getKey(token *jwt.Token) (interface{}, error) {
 	return key, nil
 }
 
-func NewSignedJWT(tokens *map[utils.TokenType]*models.Token) (string, error) {
-	var algorithm string
-	var key interface{}
-	var err error
-
-	if tokens == nil || len(*tokens) == 0 {
-		return "", fmt.Errorf("at least one token must be provided")
+func NewSignedJWTFromAuthorization(auth *models.Authorization) (string, error) {
+	if auth == nil {
+		return "", fmt.Errorf("no authorization data provided")
 	}
 
-	algorithm, key, err = loadSigningKey((*tokens)[utils.ACCESS_TOKEN_TYPE])
-	if err != nil {
-		return "", err
-	}
-
-	if algorithm == "" || (algorithm != "none" && key == nil) {
-		log.Printf("no signing key available")
-		return "", fmt.Errorf("no signing key available")
-	}
-
-	claims, err := NewClaims(tokens)
+	claims, err := NewClaimsFromAuthorization(auth)
 	if err != nil {
 		log.Printf("Failed to create claims for ID token: %v", err)
 		return "", fmt.Errorf("failed to create claims for ID token")
 	}
 
-	signingMethod := jwt.GetSigningMethod(algorithm)
-	if signingMethod == nil {
-		log.Printf("Unsupported signing algorithm: %s", algorithm)
-		return "", fmt.Errorf("unsupported signing algorithm: %s", algorithm)
+	token := &idToken{
+		Authorization: auth,
 	}
 
-	token := jwt.NewWithClaims(signingMethod, claims)
+	return token.encode(claims)
+}
 
-	if algorithm == "none" {
-		singingString, err := token.SigningString()
-		if err != nil {
-			log.Printf("Failed to create unsigned JWT: %v", err)
-			return "", fmt.Errorf("failed to create unsigned JWT")
-		}
-		return fmt.Sprintf("%s.", singingString), nil
+func NewSignedJWTFromTokens(tokens *map[utils.TokenType]*models.Token) (string, error) {
+	if tokens == nil || len(*tokens) == 0 {
+		return "", fmt.Errorf("at least one token must be provided")
 	}
 
-	if !strings.HasPrefix(algorithm, "HS") {
-		jwk, err := PublicKeyToJWK(key, algorithm)
-		if err != nil {
-			log.Printf("Failed to convert public key to JWK: %v", err)
-			return "", fmt.Errorf("failed to convert public key to JWK")
-		}
-		token.Header["kid"] = jwk.Kid
-	}
-
-	signedToken, err := token.SignedString(key)
+	claims, err := NewClaimsFromTokens(tokens)
 	if err != nil {
-		log.Printf("Failed to sign JWT: %v", err)
-		return "", fmt.Errorf("failed to sign JWT")
+		log.Printf("Failed to create claims for ID token: %v", err)
+		return "", fmt.Errorf("failed to create claims for ID token")
 	}
 
-	return signedToken, nil
+	token := &idToken{
+		Authorization: (*tokens)[utils.ACCESS_TOKEN_TYPE].Authorization,
+	}
+
+	return token.encode(claims)
 }
 
 func ParseJWT(tokenString string) (*Claims, error) {

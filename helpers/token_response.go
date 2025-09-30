@@ -88,7 +88,7 @@ func NewTokenResponse(tokens ...*models.Token) *tokenResponse {
 		}
 	}
 
-	jwt, err := idtoken.NewSignedJWT(&tokenMap)
+	jwt, err := idtoken.NewSignedJWTFromTokens(&tokenMap)
 	if err != nil {
 		log.Printf("Failed to create ID token: %v", err)
 		return &resp
