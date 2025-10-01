@@ -220,7 +220,7 @@ func (ar *authorizationResponse) Write(w http.ResponseWriter) {
 
 	encoder := utils.NewCustomEncoder()
 
-	var query url.Values
+	var query url.Values = make(map[string][]string)
 	if err := encoder.Encode(ar, query); err != nil {
 		msg := "Failed to encode authorization response parameters"
 		log.Printf("%s: %v", msg, err)
@@ -241,7 +241,8 @@ func (ar *authorizationResponse) Write(w http.ResponseWriter) {
 		u.RawQuery = query.Encode()
 	}
 
-	http.Redirect(w, nil, u.String(), http.StatusFound)
+	w.Header().Set("Location", u.String())
+	w.WriteHeader(http.StatusFound)
 }
 
 func NewAuthorizationResponse(ctx context.Context, db bun.IDB, auth *models.Authorization) (*authorizationResponse, errors.OIDCError) {

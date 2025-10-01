@@ -36,7 +36,7 @@ CREATE TYPE oidc_response_type AS ENUM (
     'code token',         -- Hybrid Flow
     'code id_token',      -- Hybrid Flow
     'id_token token',     -- Hybrid Flow
-    'code id_token token' -- Hybrid Flow
+    'code id_token token', -- Hybrid Flow
     'form_post'           -- OAuth 2.0 Form Post Response Mode
 );
 

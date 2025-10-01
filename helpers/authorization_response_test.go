@@ -2,6 +2,8 @@ package helpers
 
 import (
 	"context"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/saschazar21/go-oidc-provider/db"
@@ -74,6 +76,24 @@ func TestAuthorizationResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Implicit flow without nonce and with token",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				client.ResponseTypes = &[]utils.ResponseType{utils.TOKEN}
+				if err := client.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save client fixture: %v", err)
+				}
+
+				authorization := *auth
+				authorization.ResponseType = utils.TOKEN
+				authorization.Nonce = nil
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save authorization fixture: %v", err)
+				}
+				return &authorization
+			},
+			wantErr: false,
+		},
+		{
 			name: "Implicit flow without nonce and with id_token",
 			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
 				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.ID_TOKEN}
@@ -125,6 +145,55 @@ func TestAuthorizationResponse(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "Hybrid flow without nonce and with code token",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.CODE_TOKEN}
+				if err := client.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save client fixture: %v", err)
+				}
+				authorization := *auth
+				authorization.ResponseType = utils.CODE_TOKEN
+				authorization.Nonce = nil
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save authorization fixture: %v", err)
+				}
+				return &authorization
+			},
+			wantErr: false,
+		},
+		{
+			name: "Hybrid flow with nonce and with code id_token token",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.CODE_ID_TOKEN_TOKEN}
+				if err := client.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save client fixture: %v", err)
+				}
+				authorization := *auth
+				authorization.ResponseType = utils.CODE_ID_TOKEN_TOKEN
+				authorization.Nonce = auth.Nonce
+				if err := authorization.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save authorization fixture: %v", err)
+				}
+				return &authorization
+			},
+			wantErr: false,
+		},
+		{
+			name: "Missing authorization",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				return nil
+			},
+			wantErr: true,
+		},
+		{
+			name: "Authorization not saved",
+			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
+				authorization := *auth
+				return &authorization
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -149,6 +218,16 @@ func TestAuthorizationResponse(t *testing.T) {
 			}
 
 			if !tt.wantErr {
+				w := httptest.NewRecorder()
+				ar.Write(w)
+
+				loc := w.Result().Header.Get("Location")
+
+				redirectUri, _ := url.Parse(loc)
+				if redirectUri.String() == "" {
+					t.Fatalf("Expected redirect URI to be set")
+				}
+
 				if auth.State != nil && *auth.State != "" {
 					assert.NotEmpty(t, ar.State, "Expected state to be set")
 					assert.Equal(t, *auth.State, *ar.State, "Expected state to match")
@@ -160,35 +239,40 @@ func TestAuthorizationResponse(t *testing.T) {
 					assert.Empty(t, ar.IDToken, "Expected ID token to be empty")
 					assert.Empty(t, ar.AccessToken, "Expected access token to be empty")
 					assert.False(t, ar.IsFragment, "Expected IsFragment to be false")
+					assert.NotEmpty(t, redirectUri.RawQuery, "Expected query parameters to be set in redirect URI")
 				case utils.ID_TOKEN:
 					assert.NotEmpty(t, ar.IDToken, "Expected ID token to be set")
 					assert.Empty(t, ar.Code, "Expected authorization code to be empty")
 					assert.Empty(t, ar.AccessToken, "Expected access token to be empty")
 					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
+					assert.NotEmpty(t, redirectUri.Fragment, "Expected fragment parameters to be set in redirect URI")
 				case utils.TOKEN:
 					assert.NotEmpty(t, ar.AccessToken, "Expected access token to be set")
 					assert.Equal(t, ar.TokenType, "Bearer", "Expected token type to be set")
 					assert.Empty(t, ar.Code, "Expected authorization code to be empty")
 					assert.Empty(t, ar.IDToken, "Expected ID token to be empty")
 					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
+					assert.NotEmpty(t, redirectUri.Fragment, "Expected fragment parameters to be set in redirect URI")
 				case utils.CODE_ID_TOKEN:
 					assert.NotEmpty(t, ar.Code, "Expected authorization code to be set")
 					assert.NotEmpty(t, ar.IDToken, "Expected ID token to be set")
 					assert.Empty(t, ar.AccessToken, "Expected access token to be empty")
 					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
+					assert.NotEmpty(t, redirectUri.Fragment, "Expected fragment parameters to be set in redirect URI")
 				case utils.CODE_TOKEN:
 					assert.NotEmpty(t, ar.Code, "Expected authorization code to be set")
 					assert.NotEmpty(t, ar.AccessToken, "Expected access token to be set")
 					assert.Equal(t, ar.TokenType, "Bearer", "Expected token type to be set")
 					assert.Empty(t, ar.IDToken, "Expected ID token to be empty")
-					assert.Empty(t, ar.Code, "Expected authorization code to be empty")
 					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
+					assert.NotEmpty(t, redirectUri.Fragment, "Expected fragment parameters to be set in redirect URI")
 				case utils.CODE_ID_TOKEN_TOKEN:
 					assert.NotEmpty(t, ar.Code, "Expected authorization code to be set")
 					assert.NotEmpty(t, ar.AccessToken, "Expected access token to be set")
 					assert.Equal(t, ar.TokenType, "Bearer", "Expected token type to be set")
 					assert.NotEmpty(t, ar.IDToken, "Expected ID token to be set")
 					assert.True(t, ar.IsFragment, "Expected IsFragment to be true")
+					assert.NotEmpty(t, redirectUri.Fragment, "Expected fragment parameters to be set in redirect URI")
 				}
 			}
 		})
