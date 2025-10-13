@@ -1,6 +1,7 @@
 package idtoken
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -177,6 +178,14 @@ func ParseJWT(tokenString string) (*Claims, error) {
 	var claims Claims
 	token, err := jwt.ParseWithClaims(tokenString, &claims, getKey)
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return &claims, fmt.Errorf("token has expired")
+		}
+
+		if errors.Is(err, jwt.ErrTokenNotValidYet) {
+			return &claims, fmt.Errorf("token is not valid yet")
+		}
+
 		log.Printf("Failed to parse JWT: %v", err)
 		return nil, fmt.Errorf("failed to parse JWT")
 	}

@@ -278,7 +278,7 @@ func GetSessionByID(ctx context.Context, db bun.IDB, id string) (*Session, error
 	return &session, nil
 }
 
-func LogoutSession(ctx context.Context, db bun.IDB, sessionID string, reason *string) errors.OIDCError {
+func LogoutSession(ctx context.Context, db bun.IDB, sessionID string, reason ...string) errors.OIDCError {
 	if sessionID == "" {
 		return nil
 	}
@@ -296,9 +296,12 @@ func LogoutSession(ctx context.Context, db bun.IDB, sessionID string, reason *st
 	isActive := false
 
 	session := &Session{
-		ID:           uid,
-		IsActive:     &isActive,
-		LogoutReason: reason,
+		ID:       uid,
+		IsActive: &isActive,
+	}
+
+	if len(reason) > 0 {
+		session.LogoutReason = &reason[0]
 	}
 
 	if session.ID != uuid.Nil {
@@ -320,6 +323,64 @@ func LogoutSession(ctx context.Context, db bun.IDB, sessionID string, reason *st
 		log.Printf("Failed to log out session %s: %v", sessionID, err)
 		return err
 	}
+
+	return nil
+}
+
+func LogoutSessionsByUserID(ctx context.Context, db bun.IDB, userID string, reason ...string) errors.OIDCError {
+	if userID == "" {
+		return nil
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil || uid == uuid.Nil {
+		log.Printf("Invalid user ID format: %v", err)
+		return errors.HTTPErrorResponse{
+			StatusCode:  http.StatusBadRequest,
+			Message:     errors.BAD_REQUEST,
+			Description: "The user ID must be a valid UUID.",
+		}
+	}
+
+	isActive := false
+
+	session := &Session{
+		UserID:   uid,
+		IsActive: &isActive,
+	}
+
+	if len(reason) > 0 {
+		session.LogoutReason = &reason[0]
+	}
+
+	result, err := db.NewUpdate().
+		Model(session).
+		Where("user_id = ?", uid).
+		Where("is_active = ?", true).
+		Where("expires_at > ?", time.Now().UTC()).
+		OmitZero().
+		Exec(ctx)
+
+	msg := "Failed to log out user sessions."
+
+	if err != nil {
+		log.Printf("Failed to log out sessions for user %s: %v", userID, err)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.SERVER_ERROR,
+			ErrorDescription: &msg,
+		}
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected when logging out sessions for user %s: %v", userID, err)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.SERVER_ERROR,
+			ErrorDescription: &msg,
+		}
+	}
+
+	log.Printf("Logged out %d sessions for user %s", rowsAffected, userID)
 
 	return nil
 }

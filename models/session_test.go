@@ -180,7 +180,7 @@ func TestSession(t *testing.T) {
 				assert.NotEqual(t, retrievedSession.LastAccessedAt, updatedRetrievedSession.LastAccessedAt, "LastAccessedAt should have changed after save")
 
 				msg := "Test Logout"
-				if err := LogoutSession(ctx, db, retrievedSession.ID.String(), &msg); err != nil {
+				if err := LogoutSession(ctx, db, retrievedSession.ID.String(), msg); err != nil {
 					t.Fatalf("LogoutSession() error = %v", err)
 				}
 

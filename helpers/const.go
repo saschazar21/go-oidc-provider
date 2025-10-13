@@ -17,4 +17,8 @@ const (
 	MAGIC_LINK_EMAIL          = "email"
 	SESSION_COOKIE_NAME       = "session"
 	SESSION_COOKIE_ID         = "id"
+
+	LOGOUT_REASON_ID_TOKEN_HINT = "ID token hint"
+	LOGOUT_REASON_END_SESSION   = "end session endpoint"
+	LOGOUT_REASON_USER          = "manual logout"
 )
