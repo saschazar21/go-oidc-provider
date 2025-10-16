@@ -107,6 +107,49 @@ func TestHandleEndSession(t *testing.T) {
 				return req
 			},
 		},
+		{
+			name: "Invalid request with POST method",
+			setupSession: func(ctx context.Context, db bun.IDB) *models.Session {
+				return nil
+			},
+			createRequest: func(s *models.Session) *http.Request {
+				req, _ := http.NewRequest(http.MethodPost, "/logout", nil)
+				return req
+			},
+			wantErr: true,
+		},
+		{
+			name: "Request without session cookie",
+			setupSession: func(ctx context.Context, db bun.IDB) *models.Session {
+				return nil
+			},
+			createRequest: func(s *models.Session) *http.Request {
+				req, _ := http.NewRequest(http.MethodGet, "/logout", nil)
+				return req
+			},
+		},
+		{
+			name: "Request with invalid post_logout_redirect_uri",
+			setupSession: func(ctx context.Context, db bun.IDB) *models.Session {
+				return nil
+			},
+			createRequest: func(s *models.Session) *http.Request {
+				req, _ := http.NewRequest(http.MethodGet, "/logout?post_logout_redirect_uri=invalid-uri", nil)
+				return req
+			},
+			wantErr: true,
+		},
+		{
+			name: "Request with valid post_logout_redirect_uri",
+			setupSession: func(ctx context.Context, db bun.IDB) *models.Session {
+				return nil
+			},
+			createRequest: func(s *models.Session) *http.Request {
+				req, _ := http.NewRequest(http.MethodGet, "/logout?post_logout_redirect_uri=https://client.example.com/logout&state=abc", nil)
+				return req
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -136,6 +179,10 @@ func TestHandleEndSession(t *testing.T) {
 
 				assert.NotEmpty(t, w.Header().Get("Set-Cookie"), "expected Set-Cookie header to be set")
 				assert.Contains(t, w.Header().Get("Set-Cookie"), helpers.SESSION_COOKIE_NAME, "expected session cookie to be set")
+
+				if session == nil {
+					return
+				}
 
 				updatedSession := models.Session{
 					ID: session.ID,
