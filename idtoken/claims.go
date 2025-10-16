@@ -71,42 +71,42 @@ func (c *Claims) Validate() error {
 	return nil
 }
 
-func (c *Claims) GetExpirationTime() (*jwt.NumericDate, error) {
+func (c Claims) GetExpirationTime() (*jwt.NumericDate, error) {
 	if time.Time(c.ExpiresAt).IsZero() {
 		return nil, fmt.Errorf("expires_at is not set")
 	}
 	return jwt.NewNumericDate(time.Time(c.ExpiresAt)), nil
 }
 
-func (c *Claims) GetIssuedAt() (*jwt.NumericDate, error) {
+func (c Claims) GetIssuedAt() (*jwt.NumericDate, error) {
 	if time.Time(c.IssuedAt).IsZero() {
 		return nil, fmt.Errorf("issued_at is not set")
 	}
 	return jwt.NewNumericDate(time.Time(c.IssuedAt)), nil
 }
 
-func (c *Claims) GetNotBefore() (*jwt.NumericDate, error) {
+func (c Claims) GetNotBefore() (*jwt.NumericDate, error) {
 	if time.Time(c.NotBefore).IsZero() {
 		return nil, fmt.Errorf("not_before is not set")
 	}
 	return jwt.NewNumericDate(time.Time(c.NotBefore)), nil
 }
 
-func (c *Claims) GetSubject() (string, error) {
+func (c Claims) GetSubject() (string, error) {
 	if c.User == nil || c.User.ID == uuid.Nil {
 		return "", fmt.Errorf("subject is not set")
 	}
 	return c.User.ID.String(), nil
 }
 
-func (c *Claims) GetAudience() (jwt.ClaimStrings, error) {
+func (c Claims) GetAudience() (jwt.ClaimStrings, error) {
 	if len(c.Audience) == 0 {
 		return nil, fmt.Errorf("audience is not set")
 	}
 	return c.Audience, nil
 }
 
-func (c *Claims) GetIssuer() (string, error) {
+func (c Claims) GetIssuer() (string, error) {
 	if c.Issuer == "" {
 		return "", fmt.Errorf("issuer is not set")
 	}
