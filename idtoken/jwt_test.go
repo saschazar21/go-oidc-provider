@@ -19,7 +19,7 @@ const (
 )
 
 func TestJWT(t *testing.T) {
-	t.Setenv("ISSUER_URL", "http://localhost:8080")
+	t.Setenv(utils.ISSUER_URL_ENV, "http://localhost:8080")
 
 	es256, err := test.LoadTextFixture("ecdsa-p256.pem", true)
 	if err != nil {

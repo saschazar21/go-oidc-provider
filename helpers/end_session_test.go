@@ -23,7 +23,7 @@ const (
 var ES_KEY_HS256 = []byte("secret")
 
 func TestEndSession(t *testing.T) {
-	t.Setenv("ISSUER_URL", "https://localhost:8080")
+	t.Setenv(utils.ISSUER_URL_ENV, "https://localhost:8080")
 	t.Setenv(utils.COOKIE_AUTH_KEY_ENV, "o54wWmZD1feHQAoYFp59fecpWaQ83+It2/Ko3fiyrzo=")
 	t.Setenv("KEY_HS256", "c2VjcmV0Cg==")
 

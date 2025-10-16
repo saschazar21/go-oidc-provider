@@ -20,7 +20,7 @@ const (
 )
 
 func TestAuthorizationResponse(t *testing.T) {
-	t.Setenv("ISSUER_URL", "http://localhost:8080")
+	t.Setenv(utils.ISSUER_URL_ENV, "http://localhost:8080")
 	t.Setenv("KEY_HS256", "dGVzdAo=")
 
 	ctx := context.Background()

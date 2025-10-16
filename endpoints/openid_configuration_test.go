@@ -8,10 +8,11 @@ import (
 
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
+	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
 func TestHandleOpenIDConfiguration(t *testing.T) {
-	t.Setenv("ISSUER_URL", "https://example.com")
+	t.Setenv(utils.ISSUER_URL_ENV, "https://example.com")
 
 	rs256, err := test.LoadTextFixture("rsa2048.pem", true)
 	if err != nil {
