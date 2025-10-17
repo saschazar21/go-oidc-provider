@@ -7,14 +7,17 @@ const (
 	TOKEN_ENDPOINT                = "/token"
 	USERINFO_ENDPOINT             = "/userinfo"
 
-	LOGIN_ENDPOINT  = "/login"
-	LOGOUT_ENDPOINT = "/logout"
+	CONSUME_MAGIC_LINK_ENDPOINT = "/login/magic"
+	LOGIN_ENDPOINT              = "/login"
+	LOGOUT_ENDPOINT             = "/logout"
 
 	AUTHORIZATION_COOKIE_NAME = "authorization"
 	AUTHORIZATION_COOKIE_ID   = "id"
 	MAGIC_LINK_COOKIE_NAME    = "magic_link"
 	MAGIC_LINK_ID             = "id"
 	MAGIC_LINK_EMAIL          = "email"
+	REDIRECT_COOKIE_NAME      = "redirect"
+	REDIRECT_URI              = "uri"
 	SESSION_COOKIE_NAME       = "session"
 	SESSION_COOKIE_ID         = "id"
 
