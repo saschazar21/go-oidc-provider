@@ -14,7 +14,7 @@ func ParseClientIP(r *http.Request) string {
 	// In case of multiple IPs (comma separated), take the first one
 	if len(ipAddress) > 0 {
 		for i := 0; i < len(ipAddress); i++ {
-			if ipAddress[i] == ',' {
+			if ipAddress[i] == ',' || ipAddress[i] == ' ' || ipAddress[i] == ':' {
 				return ipAddress[:i]
 			}
 		}

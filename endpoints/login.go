@@ -176,7 +176,11 @@ func handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Magic link token created with ID %s for e-mail %s", magicLinkToken.ID.String(), magicLinkToken.Email)
+	if magicLinkToken != nil {
+		log.Printf("Magic link token created with ID %s for e-mail %s", magicLinkToken.ID.String(), magicLinkToken.Email)
+	} else {
+		log.Printf("No magic link token created for e-mail %s (not found or not whitelisted)", r.FormValue("email"))
+	}
 
 	url, err := url.Parse(os.Getenv(utils.ISSUER_URL_ENV))
 	if err != nil {
@@ -194,7 +198,7 @@ func handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	url.Path = helpers.CONSUME_MAGIC_LINK_ENDPOINT
 
 	// In demo mode, append token and id as query parameters for easy access, since there is no e-mail sent
-	if os.Getenv("DEMO_MODE") == "true" {
+	if os.Getenv("DEMO_MODE") == "true" && magicLinkToken != nil {
 		q := url.Query()
 		q.Set("token", string(*magicLinkToken.Token))
 		q.Set("id", magicLinkToken.ID.String())
