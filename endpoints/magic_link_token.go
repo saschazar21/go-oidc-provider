@@ -22,10 +22,10 @@ const (
 </head>
 <body>
 		<h1>Magic Link</h1>
-		<form method="POST" action="{.FormPostURI}">
+		<form method="POST" action="{{ .FormPostURI }}">
 			<label for="token">Token:</label>
-			<input type="text" id="token" name="token" value="{.Token}" required autofocus>
-			<input type="hidden" name="id" value="{.ID}">
+			<input type="text" id="token" name="token" value="{{ .Token }}" required autofocus>
+			<input type="hidden" name="id" value="{{ .ID }}">
 			<button type="submit">Submit</button>
 		</form>
 </body>
@@ -211,9 +211,9 @@ func handleConsumeMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error deleting redirect cookie: %v", err)
 		}
 
-		http.Redirect(w, r, redirectURI, http.StatusFound)
+		http.Redirect(w, r, redirectURI, http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

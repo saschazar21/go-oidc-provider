@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -17,9 +18,18 @@ type createMagicLinkTokenRequest struct {
 	Email string `json:"-" schema:"email" validate:"required,email"`
 }
 
+func (cmltr *createMagicLinkTokenRequest) Sanitize() {
+	cmltr.Email = strings.ToLower(strings.TrimSpace(cmltr.Email))
+}
+
 type validateMagicLinkTokenRequest struct {
 	ID    string `json:"-" schema:"id" validate:"omitempty,uuid4"`
 	Token string `json:"-" schema:"token" validate:"required"`
+}
+
+func (vmltr *validateMagicLinkTokenRequest) Sanitize() {
+	vmltr.ID = strings.ToLower(strings.TrimSpace(vmltr.ID))
+	vmltr.Token = strings.TrimSpace(vmltr.Token)
 }
 
 func createWhitelistedUser(ctx context.Context, db bun.IDB, email string) (*models.User, errors.OIDCError) {
@@ -125,6 +135,8 @@ func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWrite
 		return nil, err
 	}
 
+	req.Sanitize()
+
 	if err := req.Validate(); err != nil {
 		log.Printf("Failed to validate validate magic link token request: %v", err)
 		msg := "Either token is missing or request contents are invalid."
@@ -203,6 +215,8 @@ func CreateMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWriter
 	if err != nil {
 		return nil, err
 	}
+
+	req.Sanitize()
 
 	if err := req.Validate(); err != nil {
 		log.Printf("Failed to validate create magic link token request: %v", err)

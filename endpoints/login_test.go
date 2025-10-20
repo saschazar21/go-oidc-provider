@@ -2,6 +2,7 @@ package endpoints
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,7 +67,7 @@ func TestHandleLogin(t *testing.T) {
 		{
 			name:              "POST method with valid email",
 			method:            "POST",
-			formValues:        map[string]string{"email": string(*user.Email)},
+			formValues:        map[string]string{"email": fmt.Sprintf(" %s ", string(*user.Email))},
 			wantRealMagicLink: true,
 			wantStatus:        http.StatusSeeOther,
 		},
@@ -76,6 +77,17 @@ func TestHandleLogin(t *testing.T) {
 			formValues:        map[string]string{"email": "invalid@example.com"},
 			wantRealMagicLink: false,
 			wantStatus:        http.StatusSeeOther,
+		},
+		{
+			name:       "HEAD method",
+			method:     "HEAD",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "POST method with missing email",
+			method:     "POST",
+			formValues: map[string]string{},
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 

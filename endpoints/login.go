@@ -23,7 +23,7 @@ const (
 </head>
 <body>
 		<h1>Login</h1>
-		<form method="POST" action="{.FormPostURI}">
+		<form method="POST" action="{{ .FormPostURI }}">
 			<label for="email">E-Mail:</label>
 			<input type="email" id="email" name="email" required autofocus>
 			<button type="submit">Login</button>

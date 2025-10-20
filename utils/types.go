@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,10 @@ type Marshalable interface {
 
 type Validatable interface {
 	Validate() error
+}
+
+type Writable interface {
+	Write(w http.ResponseWriter)
 }
 
 type AuthMethod string

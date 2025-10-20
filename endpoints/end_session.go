@@ -1,6 +1,7 @@
 package endpoints
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -64,7 +65,7 @@ func handleEndSession(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to logout sessions: %v", err)
 	}
 
-	w.Header().Set("Set-Cookie", "session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+	w.Header().Set("Set-Cookie", fmt.Sprintf("%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=-1", helpers.SESSION_COOKIE_NAME))
 
 	var location *url.URL
 	if ers.PostLogoutRedirectURI != "" {

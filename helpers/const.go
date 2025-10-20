@@ -1,11 +1,12 @@
 package helpers
 
 const (
-	JWKS_ENDPOINT                 = "/.well-known/jwks.json"
-	OPENID_CONFIGURATION_ENDPOINT = "/.well-known/openid-configuration"
-	AUTHORIZATION_GRANT_ENDPOINT  = "/authorize"
-	TOKEN_ENDPOINT                = "/token"
-	USERINFO_ENDPOINT             = "/userinfo"
+	JWKS_ENDPOINT                   = "/.well-known/jwks.json"
+	OPENID_CONFIGURATION_ENDPOINT   = "/.well-known/openid-configuration"
+	AUTHORIZATION_DECISION_ENDPOINT = "/authorize/decision"
+	AUTHORIZATION_GRANT_ENDPOINT    = "/authorize"
+	TOKEN_ENDPOINT                  = "/token"
+	USERINFO_ENDPOINT               = "/userinfo"
 
 	CONSUME_MAGIC_LINK_ENDPOINT = "/login/magic"
 	LOGIN_ENDPOINT              = "/login"

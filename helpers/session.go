@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
@@ -95,6 +96,17 @@ func ParseSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *htt
 }
 
 func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request, session *models.Session) errors.HTTPError {
+	if session.ID == uuid.Nil {
+		if err := session.Save(ctx, db); err != nil {
+			log.Printf("Error saving session: %v", err)
+			return errors.HTTPErrorResponse{
+				StatusCode:  http.StatusInternalServerError,
+				Message:     "Internal Server Error",
+				Description: "Failed to create user session.",
+			}
+		}
+	}
+
 	cookieSession, err := utils.NewCookieStore().Get(r, SESSION_COOKIE_NAME)
 	if err != nil {
 		log.Printf("Error retrieving session cookie: %v", err)

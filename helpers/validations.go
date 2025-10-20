@@ -10,6 +10,20 @@ import (
 	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
+func (ad *authorizationDecision) Validate() errors.OIDCError {
+	validator := utils.NewCustomValidator()
+	if err := validator.Struct(ad); err != nil {
+		msg := "Authorization decision validation failed"
+		log.Printf("%s: %v", msg, err)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &msg,
+			StatusCode:       http.StatusBadRequest,
+		}
+	}
+	return nil
+}
+
 func (ar *authorizationRequest) Validate() errors.OIDCError {
 	switch ar.r.Method {
 	case http.MethodGet:

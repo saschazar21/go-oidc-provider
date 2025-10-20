@@ -157,6 +157,10 @@ func (a *Authorization) BeforeAppendModel(ctx context.Context, query bun.Query) 
 	return nil
 }
 
+func (a *Authorization) IsApproved() bool {
+	return a.IsActive && a.Status != nil && *a.Status == utils.APPROVED
+}
+
 func (a *Authorization) Save(ctx context.Context, db bun.IDB) errors.OIDCError {
 	if err := a.Validate(); err != nil {
 		return err
