@@ -1,10 +1,15 @@
 package helpers
 
 import (
+	"fmt"
+	"log"
+	"net/http"
 	"testing"
 
+	"github.com/gorilla/sessions"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/test"
+	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
 func loadUserFixture(t *testing.T) *models.User {
@@ -32,4 +37,16 @@ func loadAuthFixture(t *testing.T) *models.Authorization {
 	}
 
 	return &auth
+}
+
+func parseCookieFromRequest(r *http.Request, cookieName string) (cookie *sessions.Session, err error) {
+	cookieStore := utils.NewCookieStore()
+
+	cookie, err = cookieStore.Get(r, cookieName)
+	if err != nil {
+		log.Printf("Error parsing %s cookie: %v", cookieName, err)
+		err = fmt.Errorf("error parsing %s cookie", cookieName)
+	}
+
+	return cookie, err
 }

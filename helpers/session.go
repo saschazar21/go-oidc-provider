@@ -24,9 +24,7 @@ func getSessionIdFromCookie(w http.ResponseWriter, r *http.Request) (string, err
 		statusCode = http.StatusTemporaryRedirect
 	}
 
-	cookieStore := utils.NewCookieStore()
-
-	session, err := cookieStore.Get(r, SESSION_COOKIE_NAME)
+	session, err := parseCookieFromRequest(r, SESSION_COOKIE_NAME)
 	id := session.Values[SESSION_COOKIE_ID]
 
 	if id == nil {

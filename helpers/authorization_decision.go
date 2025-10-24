@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/models"
@@ -16,7 +17,8 @@ import (
 type authorizationDecision struct {
 	Action *utils.AuthStatus `json:"-" schema:"action" validate:"required,oneof=approved denied"`
 
-	auth *models.Authorization `json:"-" schema:"-"`
+	auth    *models.Authorization `json:"-" schema:"-"`
+	session *models.Session       `json:"-" schema:"-"`
 }
 
 func (ad *authorizationDecision) Sanitize() {
@@ -27,8 +29,15 @@ func (ad *authorizationDecision) Sanitize() {
 }
 
 func (ad *authorizationDecision) updateAuthorization(ctx context.Context, db bun.IDB) errors.OIDCError {
-	ad.auth.IsActive = *ad.Action == utils.APPROVED
+	ad.auth.IsActive = ad.Action != nil && *ad.Action == utils.APPROVED
 	ad.auth.Status = ad.Action
+	ad.auth.UserID = ad.session.UserID
+	ad.auth.User = ad.session.User
+
+	if ad.auth.IsActive {
+		now := time.Now().UTC()
+		ad.auth.ApprovedAt = &now
+	}
 
 	if err := ad.auth.Save(ctx, db); err != nil {
 		msg := fmt.Sprintf("Failed to save %s authorization", string(*ad.auth.Status))
@@ -44,23 +53,11 @@ func (ad *authorizationDecision) updateAuthorization(ctx context.Context, db bun
 }
 
 func (ad *authorizationDecision) parseAuthorizationCookie(ctx context.Context, db bun.IDB, r *http.Request) errors.OIDCError {
-	cookieStore := utils.NewCookieStore()
-
-	cookie, err := cookieStore.Get(r, AUTHORIZATION_COOKIE_NAME)
-	if err != nil {
-		msg := "Error retrieving authorization cookie"
-		log.Printf("%s: %v", msg, err)
-		return errors.OIDCErrorResponse{
-			ErrorCode:        errors.INVALID_REQUEST,
-			ErrorDescription: &msg,
-			StatusCode:       http.StatusBadRequest,
-		}
-	}
-
+	cookie, err := parseCookieFromRequest(r, AUTHORIZATION_COOKIE_NAME)
 	id := cookie.Values[AUTHORIZATION_COOKIE_ID]
-	if id == nil {
-		msg := "No authorization cookie found"
-		log.Printf("%s", msg)
+	if err != nil || id == nil {
+		msg := "No valid authorization cookie found"
+		log.Printf("%s: %v", msg, err)
 		return errors.OIDCErrorResponse{
 			ErrorCode:        errors.INVALID_REQUEST,
 			ErrorDescription: &msg,
@@ -85,6 +82,45 @@ func (ad *authorizationDecision) parseAuthorizationCookie(ctx context.Context, d
 	}
 
 	ad.auth = auth
+	return nil
+}
+
+func (ad *authorizationDecision) parseSessionCookie(ctx context.Context, db bun.IDB, r *http.Request) errors.OIDCError {
+	cookie, err := parseCookieFromRequest(r, SESSION_COOKIE_NAME)
+	id := cookie.Values[SESSION_COOKIE_ID]
+	if err != nil || id == nil {
+		msg := "No valid session cookie found"
+		log.Printf("%s: %v", msg, err)
+		return errors.HTTPErrorResponse{
+			StatusCode:  http.StatusForbidden,
+			Message:     errors.FORBIDDEN,
+			Description: msg,
+		}
+	}
+
+	sessionId, ok := id.(string)
+	if !ok {
+		msg := "Failed to parse session ID from cookie"
+		log.Printf("%s", msg)
+		return errors.HTTPErrorResponse{
+			StatusCode:  http.StatusForbidden,
+			Message:     errors.FORBIDDEN,
+			Description: msg,
+		}
+	}
+
+	session, oidcErr := models.GetSessionByID(ctx, db, sessionId)
+	if oidcErr != nil {
+		msg := "Failed to find session in database"
+		log.Printf("%s: %v", msg, oidcErr)
+		return errors.HTTPErrorResponse{
+			StatusCode:  http.StatusForbidden,
+			Message:     errors.FORBIDDEN,
+			Description: msg,
+		}
+	}
+
+	ad.session = session
 	return nil
 }
 
@@ -119,6 +155,12 @@ func HandleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Reques
 }
 
 func handleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Request) (utils.Writable, errors.OIDCError) {
+	var decision authorizationDecision
+
+	if err := decision.parseSessionCookie(ctx, db, r); err != nil {
+		return nil, err
+	}
+
 	if err := r.ParseForm(); err != nil {
 		msg := "Failed to parse form data"
 		log.Printf("%s: %v", msg, err)
@@ -129,8 +171,6 @@ func handleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Reques
 		}
 		return nil, err
 	}
-
-	var decision authorizationDecision
 
 	decoder := utils.NewCustomDecoder()
 	if err := decoder.Decode(&decision, r.PostForm); err != nil {
@@ -179,12 +219,18 @@ func handleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Reques
 				RedirectURI:      decision.auth.RedirectURI,
 				State:            decision.auth.State,
 				IsFragment:       decision.auth.ResponseType != "" && decision.auth.ResponseType != utils.CODE,
-				StatusCode:       http.StatusFound,
+				StatusCode:       http.StatusSeeOther,
 			}
 			return err, nil // return error response as Writable, so that transaction can be committed
 		}
 
-		return NewAuthorizationResponse(ctx, db, decision.auth)
+		ar, err := NewAuthorizationResponse(ctx, db, decision.auth)
+		if err != nil {
+			return nil, err
+		}
+
+		ar.StatusCode = http.StatusSeeOther
+		return ar, nil
 	default:
 		msg := "Unsupported authorization decision"
 		log.Printf("%s: %v", msg, decision.Action)

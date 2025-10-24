@@ -26,6 +26,7 @@ type authorizationResponse struct {
 	ExpiresIn   int64  `json:"expires_in,omitempty" schema:"expires_in,omitempty" validate:"omitempty,gt=0"`
 
 	IsFragment bool `json:"-" schema:"-"`
+	StatusCode int  `json:"-" schema:"-"`
 
 	authorization *models.Authorization `json:"-" schema:"-"`
 }
@@ -244,8 +245,13 @@ func (ar *authorizationResponse) Write(w http.ResponseWriter) {
 		u.RawQuery = query.Encode()
 	}
 
+	statusCode := http.StatusFound
+	if ar.StatusCode >= 100 && ar.StatusCode <= 599 {
+		statusCode = ar.StatusCode
+	}
+
 	w.Header().Set("Location", u.String())
-	w.WriteHeader(http.StatusFound)
+	w.WriteHeader(statusCode)
 }
 
 func NewAuthorizationResponse(ctx context.Context, db bun.IDB, auth *models.Authorization) (*authorizationResponse, errors.OIDCError) {

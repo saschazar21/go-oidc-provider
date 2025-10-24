@@ -66,7 +66,7 @@ func (e OIDCErrorResponse) Write(w http.ResponseWriter) {
 
 	encoder := utils.NewCustomEncoder()
 
-	var query url.Values
+	var query url.Values = make(map[string][]string)
 	if err := encoder.Encode(e, query); err != nil {
 		http.Error(w, e.Error(), http.StatusBadRequest)
 		return
