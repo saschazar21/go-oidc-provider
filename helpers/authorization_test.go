@@ -210,7 +210,7 @@ func TestAuthorizationRequest(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				// No pre-hook actions needed for this test
 			},
-			WantErr: true,
+			WantErr: false,
 		},
 		{
 			Name:   "Missing Consent",
@@ -397,7 +397,7 @@ func TestAuthorizationRequest(t *testing.T) {
 					t.Fatalf("Failed to save session: %v", err)
 				}
 			},
-			WantErr: true,
+			WantErr: false,
 		},
 		{
 			Name: "Invalid authorization cookie with empty authorization ID",
@@ -589,12 +589,43 @@ func TestAuthorizationRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.Name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := r.Context()
+				db := db.Connect(ctx)
+				defer db.Close()
+
+				tx, err := db.BeginTx(ctx, nil)
+				if err != nil {
+					tx.Rollback()
+					t.Fatalf("Failed to begin transaction: %v", err)
+				}
+
+				writable, _, oidcErr := HandleAuthorizationRequest(ctx, tx, w, r)
+				if oidcErr != nil {
+					tx.Rollback()
+					oidcErr.Write(w)
+					return
+				}
+
+				if err := tx.Commit(); err != nil {
+					t.Fatalf("Failed to commit transaction: %v", err)
+				}
+
+				if writable != nil {
+					writable.Write(w)
+					return
+				}
+
+				w.WriteHeader(http.StatusNoContent) // normally render authorization decision form if no consent yet, but valid session exists
+				w.Write([]byte{})
+			}))
 			db := db.Connect(ctx)
 
 			t.Cleanup(func() {
 				if err := db.Close(); err != nil {
 					t.Fatalf("Failed to close connection: %v", err)
 				}
+				server.Close()
 
 				pgContainer.Restore(ctx, postgres.WithSnapshotName(AR_SNAPSHOT_INIT))
 			})
@@ -605,45 +636,105 @@ func TestAuthorizationRequest(t *testing.T) {
 				body = strings.NewReader(tt.Params.Encode())
 			}
 
-			r := httptest.NewRequest(tt.Method, AUTHORIZATION_GRANT_ENDPOINT, body)
+			httpClient := &http.Client{
+				CheckRedirect: func(req *http.Request, via []*http.Request) error {
+					return http.ErrUseLastResponse
+				},
+			}
+
+			req, err := http.NewRequest(tt.Method, server.URL+AUTHORIZATION_GRANT_ENDPOINT, body)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
+
 			switch tt.Method {
 			case http.MethodGet:
-				r.URL.RawQuery = tt.Params.Encode()
+				req.URL.RawQuery = tt.Params.Encode()
 			case http.MethodPost:
-				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			default:
+				t.Fatalf("Unsupported method: %s", tt.Method)
 			}
 
 			if tt.PreHook != nil {
-				tt.PreHook(ctx, db, r)
+				tt.PreHook(ctx, db, req)
 			}
 
-			w := httptest.NewRecorder()
-
-			auth, err := HandleAuthorizationRequest(ctx, db, w, r)
-			if (err != nil) != tt.WantErr {
-				t.Fatalf("HandleAuthorizationRequest() error = %v, wantErr %v", err, tt.WantErr)
+			res, err := httpClient.Do(req)
+			if err != nil {
+				t.Fatalf("Failed to perform request: %v", err)
 			}
 
-			if err == nil && auth == nil {
-				t.Fatalf("Expected valid authorization, got nil")
-			}
+			defer res.Body.Close()
 
-			if !tt.WantErr {
-				assert.NotNil(t, auth, "Expected valid authorization, got nil")
-				assert.NotEmpty(t, auth.ID, "Expected authorization to have an ID")
-
+			if tt.WantErr {
+				redirectUri := res.Header.Get("Location")
+				if redirectUri == "" {
+					assert.GreaterOrEqual(t, res.StatusCode, 400, "Expected error status code, got %d", res.StatusCode)
+					return
+				}
+				u, _ := url.Parse(redirectUri)
+				q := u.Query()
+				assert.NotEmpty(t, q.Get("error"), "Expected error parameter in redirect URI")
+			} else {
 				if tt.WantConsent {
-					status := utils.APPROVED
+					redirectUri := res.Header.Get("Location")
+					if redirectUri == "" {
+						t.Fatalf("Expected redirect to client redirect URI, but got none")
+					}
+					u, _ := url.Parse(redirectUri)
+					assert.Equal(t, client.RedirectURIs[0], fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path), "Expected redirect to client redirect URI")
 
-					assert.NotEmpty(t, auth.ReplacedID, "Expected authorization to contain previous consent, but it didn't")
-					assert.NotNil(t, auth.ReplacedAuthorization, "Expected authorization to contain previous consent, but it didn't")
-					assert.True(t, auth.IsActive, "Expected authorization to be active")
-					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'approved'")
+					query := u.Query()
+					decoder := utils.NewCustomDecoder()
+					var authorizationResponse authorizationResponse
+					if err := decoder.Decode(&authorizationResponse, query); err != nil {
+						t.Fatalf("Failed to decode authorization response: %v", err)
+					}
+
+					tokenValue := ""
+
+					if authorizationResponse.Code != "" {
+						tokenValue = authorizationResponse.Code
+					} else if authorizationResponse.AccessToken != "" {
+						tokenValue = authorizationResponse.AccessToken
+					}
+
+					if tokenValue == "" {
+						t.Fatalf("Expected token value in response, but got none")
+					}
+
+					token, err := models.GetTokenByValue(ctx, db, authorizationResponse.Code)
+					if err != nil {
+						t.Fatalf("Failed to retrieve authorization code token: %v", err)
+					}
+					assert.Equal(t, client.ID, (*token).Authorization.ClientID, "Token ClientID does not match")
+					assert.Equal(t, user.ID, (*token).Authorization.UserID, "Token UserID does not match")
+					assert.Equal(t, utils.APPROVED, *(*token).Authorization.Status, "Authorization status is not approved")
 				} else {
-					status := utils.PENDING
+					req := httptest.NewRequest(tt.Method, AUTHORIZATION_GRANT_ENDPOINT, nil)
 
-					assert.False(t, auth.IsActive, "Expected authorization to not be active")
-					assert.Equal(t, auth.Status, &status, "Expected authorization status to be 'pending'")
+					for _, c := range res.Cookies() {
+						req.AddCookie(c)
+					}
+
+					cookieStore := utils.NewCookieStore()
+					cookieSession, err := cookieStore.Get(req, AUTHORIZATION_COOKIE_NAME)
+					if err != nil {
+						t.Fatalf("Failed to get authorization cookie: %v", err)
+					}
+
+					authID, ok := cookieSession.Values[AUTHORIZATION_COOKIE_ID].(string)
+					assert.True(t, ok, "Authorization ID not found in cookie")
+					assert.NotEmpty(t, authID, "Authorization ID in cookie is empty")
+
+					auth, err := models.GetAuthorizationByID(ctx, db, authID)
+					if err != nil {
+						t.Fatalf("Failed to retrieve authorization by ID: %v", err)
+					}
+					assert.Equal(t, utils.PENDING, *(*auth).Status, "Authorization status is not pending")
+					assert.Equal(t, client.ID, (*auth).ClientID, "Authorization ClientID does not match")
+					assert.Empty(t, (*auth).UserID, "Authorization user must not be set before consent")
 				}
 			}
 		})

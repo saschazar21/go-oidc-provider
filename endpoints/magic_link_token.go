@@ -202,16 +202,29 @@ func handleConsumeMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookieSession := utils.NewCookieStore()
-	redirectSession, _ := cookieSession.Get(r, helpers.REDIRECT_COOKIE_NAME)
-	redirectURI, ok := redirectSession.Values[helpers.REDIRECT_URI].(string)
-	if ok && redirectURI != "" {
-		// Clear redirect cookie
-		redirectSession.Options.MaxAge = -1
-		if err := redirectSession.Save(r, w); err != nil {
-			log.Printf("Error deleting redirect cookie: %v", err)
+	redirectSession, _ := cookieSession.Get(r, helpers.AUTHORIZATION_COOKIE_NAME)
+	authId, ok := redirectSession.Values[helpers.AUTHORIZATION_COOKIE_ID].(string)
+	if ok && authId != "" {
+		log.Printf("Redirecting to authorization endpoint for handling authorization ID: %s", authId)
+		http.Redirect(w, r, helpers.AUTHORIZATION_GRANT_ENDPOINT, http.StatusSeeOther)
+		return
+	}
+
+	redirectCookie, err := r.Cookie(helpers.REDIRECT_COOKIE_NAME) // make sure to access plaintext cookie here
+	if err == nil {
+		log.Printf("Redirecting to URI set in cookie: %s", redirectCookie.Value)
+		// remove redirect cookie after use
+		expiredCookie := &http.Cookie{
+			Name:     helpers.REDIRECT_COOKIE_NAME,
+			Value:    "",
+			MaxAge:   -1,
+			HttpOnly: true,
+			Path:     "/",
+			Secure:   true,
 		}
 
-		http.Redirect(w, r, redirectURI, http.StatusSeeOther)
+		http.SetCookie(w, expiredCookie)
+		http.Redirect(w, r, redirectCookie.Value, http.StatusSeeOther)
 		return
 	}
 

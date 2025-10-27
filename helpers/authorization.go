@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -354,7 +355,7 @@ func parseAuthorizationRequest(w http.ResponseWriter, r *http.Request) (*authori
 	return &ar, nil
 }
 
-func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (_ *models.Authorization, err errors.OIDCError) {
+func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (_ utils.Writable, _ *models.Authorization, err errors.OIDCError) {
 	ar, err := ParseAuthorizationRequest(ctx, db, w, r)
 	if err != nil {
 		return
@@ -367,12 +368,12 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 	if auth.Prompt != nil && *auth.Prompt == utils.NONE && auth.ReplacedID == uuid.Nil {
 		if err != nil {
 			if oidcErr, ok := err.(errors.OIDCErrorResponse); ok {
-				return nil, oidcErr
+				return nil, nil, oidcErr
 			}
 		}
 		description := "Prompt is set to 'none', but user has not previously authorized this client."
 		log.Println(description)
-		return nil, errors.OIDCErrorResponse{
+		return nil, nil, errors.OIDCErrorResponse{
 			ErrorCode:        errors.INTERACTION_REQUIRED,
 			ErrorDescription: &description,
 			RedirectURI:      auth.RedirectURI,
@@ -382,15 +383,47 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 	// Store the (intermediate) authorization in the database
 	if err := auth.Save(ctx, db); err != nil {
 		log.Printf("Failed to store authorization in database: %v", err)
-		return nil, err
+		return nil, nil, err
+	}
+
+	if auth.IsApproved() { // create authorization response if authorization can be completed without user interaction
+		log.Printf("Authorization approved for client %s and user %s", auth.ClientID, auth.UserID)
+
+		arResponse, oidcErr := NewAuthorizationResponse(ctx, db, auth)
+		if oidcErr != nil {
+			log.Printf("Failed to create authorization response: %v", oidcErr)
+			return nil, nil, oidcErr
+		}
+
+		return arResponse, nil, nil
+	}
+
+	cookieStore, _ := utils.NewCookieStore().Get(r, AUTHORIZATION_COOKIE_NAME)
+	cookieStore.Values[AUTHORIZATION_COOKIE_ID] = auth.ID.String()
+	cookieStore.Options.HttpOnly = true
+	cookieStore.Options.MaxAge = int(auth.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds())
+	cookieStore.Options.Path = "/"
+	cookieStore.Options.SameSite = http.SameSiteLaxMode
+	cookieStore.Options.Secure = true
+
+	if err := cookieStore.Save(r, w); err != nil {
+		log.Printf("Error saving authorization cookie: %v", err)
+		msg := "Failed to save authorization session."
+		return nil, nil, errors.OIDCErrorResponse{
+			ErrorCode:        errors.SERVER_ERROR,
+			ErrorDescription: &msg,
+			StatusCode:       http.StatusInternalServerError,
+			RedirectURI:      auth.RedirectURI,
+		}
 	}
 
 	if err != nil { // error means redirect to /login
 		log.Printf("No valid session found or prompt=\"login\" detected: %v", err)
-		return
+		return err, nil, nil
 	}
 
-	return auth, nil
+	// nil means user interaction is required, therefore render authorization decision form
+	return nil, auth, nil
 }
 
 func ParseAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (_ *authorizationRequest, err errors.OIDCError) {

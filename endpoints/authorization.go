@@ -4,9 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"time"
 
-	"github.com/gorilla/sessions"
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/helpers"
@@ -34,8 +32,8 @@ const (
 		</ul>
 		{{ end }}
 		<form method="POST" action="{{ .FormPostURI }}">
-			<button type="submit" name="action" value="approve">Approve</button>
-			<button type="submit" name="action" value="deny">Deny</button>
+			<button type="submit" name="action" value="approved">Approve</button>
+			<button type="submit" name="action" value="denied">Deny</button>
 		</form>
 	</body>
 </html>`
@@ -93,9 +91,10 @@ func handleAuthorization(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var auth *models.Authorization
+	var authResponse utils.Writable
 	var oidcErr errors.OIDCError
 
-	if auth, oidcErr = helpers.HandleAuthorizationRequest(ctx, trx, w, r); oidcErr != nil || auth == nil {
+	if authResponse, auth, oidcErr = helpers.HandleAuthorizationRequest(ctx, trx, w, r); oidcErr != nil {
 		log.Printf("Failed to handle authorization request: %v", oidcErr)
 		if rbErr := trx.Rollback(); rbErr != nil {
 			log.Printf("Failed to rollback transaction: %v", rbErr)
@@ -128,42 +127,8 @@ func handleAuthorization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// redirect, if authorization can be completed without user interaction
-	if auth.IsApproved() {
-		res, err := helpers.NewAuthorizationResponse(ctx, conn, auth)
-		if err != nil {
-			log.Printf("Failed to create authorization response: %v", err)
-
-			err.Write(w)
-			return
-		}
-
-		res.Write(w)
-		return
-	}
-
-	sessionStore := utils.NewCookieStore()
-	cookie, _ := sessionStore.Get(r, helpers.AUTHORIZATION_COOKIE_NAME)
-	cookie.Values[helpers.AUTHORIZATION_COOKIE_ID] = auth.ID.String()
-	cookie.Options = &sessions.Options{
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   true,
-		MaxAge:   int(auth.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds()),
-	}
-
-	if err := cookie.Save(r, w); err != nil {
-		log.Printf("Error saving authorization cookie: %v", err)
-		msg := "Failed to save authorization session."
-		err := errors.OIDCErrorResponse{
-			ErrorCode:        errors.SERVER_ERROR,
-			ErrorDescription: &msg,
-			StatusCode:       http.StatusInternalServerError,
-			RedirectURI:      auth.RedirectURI,
-			IsFragment:       auth.ResponseType != "" && auth.ResponseType != utils.CODE,
-		}
-
-		err.Write(w)
+	if authResponse != nil {
+		authResponse.Write(w)
 		return
 	}
 

@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -189,7 +188,15 @@ func (ar *authorizationResponse) populateResponse(ctx context.Context, db bun.ID
 }
 
 func (ar *authorizationResponse) Write(w http.ResponseWriter) {
-	w.Header().Set("Set-Cookie", fmt.Sprintf("%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=-1", AUTHORIZATION_COOKIE_NAME))
+	cookie := http.Cookie{
+		Name:     AUTHORIZATION_COOKIE_NAME,
+		Value:    "",
+		MaxAge:   -1, // Delete cookie
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+	}
+	http.SetCookie(w, &cookie)
 
 	if err := ar.Validate(); err != nil {
 		msg := "Invalid authorization response"

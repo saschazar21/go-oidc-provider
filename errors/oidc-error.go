@@ -82,10 +82,9 @@ func (e OIDCErrorResponse) Write(w http.ResponseWriter) {
 		e.StatusCode = http.StatusFound
 	}
 
-	w.WriteHeader(e.StatusCode)
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Location", u.String())
-	w.Write([]byte(fmt.Sprintf("<html><body><script>window.location.href='%s';</script><a href='%s'>Back to %s</a></body></html>", u.String(), u.String(), e.RedirectURI)))
+	http.Redirect(w, nil, u.String(), e.StatusCode)
 }
