@@ -233,7 +233,11 @@ func handleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Reques
 		return ar, nil
 	default:
 		msg := "Unsupported authorization decision"
-		log.Printf("%s: %v", msg, decision.Action)
+		if decision.Action != nil {
+			log.Printf("%s: %v", msg, *decision.Action)
+		} else {
+			log.Printf("%s: nil action", msg)
+		}
 		err := errors.HTTPErrorResponse{
 			StatusCode:  http.StatusBadRequest,
 			Message:     "Bad Request",
