@@ -163,7 +163,7 @@ func NewClaimsFromAuthorization(auth *models.Authorization) (*Claims, error) {
 	claims.Scope = auth.Scope
 	claims.User = auth.User.GetClaimsBasedOnScopes(auth.Scope)
 
-	if utils.ContainsValue(auth.Scope, utils.PROFILE) {
+	if auth.User.UpdatedAt != nil && utils.ContainsValue(auth.Scope, utils.PROFILE) {
 		claims.UpdatedAt = jwt.NewNumericDate(auth.User.UpdatedAt.UpdatedAt)
 	}
 
