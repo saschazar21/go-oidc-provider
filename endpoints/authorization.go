@@ -100,15 +100,6 @@ func handleAuthorization(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Failed to rollback transaction: %v", rbErr)
 		}
 
-		if oidcErr == nil {
-			msg := "Unknown error during authorization handling"
-			oidcErr = &errors.HTTPErrorResponse{
-				StatusCode:  http.StatusInternalServerError,
-				Message:     "Internal Server Error",
-				Description: msg,
-			}
-		}
-
 		oidcErr.Write(w)
 		return
 	}

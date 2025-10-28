@@ -144,6 +144,95 @@ func TestHandleAuthorization(t *testing.T) {
 			wantStatus:        utils.PENDING, // status should remain unchanged
 			wantToken:         false,
 		},
+		{
+			name: "Approved authorization request",
+			preHook: func(t *testing.T, ctx context.Context, db bun.IDB, origin string) *http.Request {
+				req, err := http.NewRequest(http.MethodGet, origin+"/authorize", nil)
+				if err != nil {
+					t.Fatalf("failed to create request: %v", err)
+				}
+				q := req.URL.Query()
+				q.Add("response_type", "code")
+				q.Add("client_id", client.ID)
+				q.Add("code_challenge", "challenge")
+				q.Add("redirect_uri", client.RedirectURIs[0])
+				q.Add("scope", "openid")
+				q.Add("state", "xyz")
+				q.Add("nonce", "abc")
+				req.URL.RawQuery = q.Encode()
+
+				session := models.Session{
+					UserID: user.ID,
+				}
+				if err := session.Save(ctx, db); err != nil {
+					t.Fatalf("failed to save session: %v", err)
+				}
+
+				auth := approvedAuth
+				auth.UserID = user.ID
+				auth.ClientID = client.ID
+				auth.User = &user
+				auth.Client = &client
+				if err := auth.Save(ctx, db); err != nil {
+					t.Fatalf("failed to save authorization: %v", err)
+				}
+
+				rec := httptest.NewRecorder()
+				cookies := utils.NewCookieStore()
+				sessionCookie, _ := cookies.Get(req, helpers.SESSION_COOKIE_NAME)
+				sessionCookie.Values[helpers.SESSION_COOKIE_ID] = session.ID.String()
+				if err := sessionCookie.Save(req, rec); err != nil {
+					t.Fatalf("failed to save session cookie: %v", err)
+				}
+
+				for _, cookie := range rec.Result().Cookies() {
+					req.AddCookie(cookie)
+				}
+
+				return req
+			},
+			expectedCode:      http.StatusFound,
+			wantErrorResponse: false,
+			wantStatus:        utils.APPROVED,
+			wantToken:         true,
+		},
+		{
+			name: "Invalid request method",
+			preHook: func(t *testing.T, ctx context.Context, db bun.IDB, origin string) *http.Request {
+				req, err := http.NewRequest(http.MethodPost, origin+"/authorize", nil)
+				if err != nil {
+					t.Fatalf("failed to create request: %v", err)
+				}
+				return req
+			},
+			expectedCode:      http.StatusMethodNotAllowed,
+			wantErrorResponse: true,
+			wantStatus:        utils.PENDING,
+			wantToken:         false,
+		},
+		{
+			name: "Invalid client ID",
+			preHook: func(t *testing.T, ctx context.Context, db bun.IDB, origin string) *http.Request {
+				req, err := http.NewRequest(http.MethodGet, origin+"/authorize", nil)
+				if err != nil {
+					t.Fatalf("failed to create request: %v", err)
+				}
+				q := req.URL.Query()
+				q.Add("response_type", "code")
+				q.Add("client_id", "invalid-client-id")
+				q.Add("code_challenge", "challenge")
+				q.Add("redirect_uri", client.RedirectURIs[0])
+				q.Add("scope", "openid")
+				q.Add("state", "xyz")
+				q.Add("nonce", "abc")
+				req.URL.RawQuery = q.Encode()
+				return req
+			},
+			expectedCode:      http.StatusFound,
+			wantErrorResponse: true,
+			wantStatus:        utils.PENDING,
+			wantToken:         false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -199,6 +288,18 @@ func TestHandleAuthorization(t *testing.T) {
 			}
 
 			authCookie, err := cookies.Get(req, helpers.AUTHORIZATION_COOKIE_NAME)
+
+			if tt.wantErrorResponse {
+				assert.True(t, authCookie.IsNew, "no authorization cookie should be set on error response")
+				assert.Equal(t, authCookie.Values[helpers.AUTHORIZATION_COOKIE_ID], nil, "authorization cookie ID should be nil")
+
+				if tt.expectedCode == http.StatusFound {
+					location := res.Header.Get("Location")
+					assert.Contains(t, location, "error=", "redirect location should contain error parameter")
+				}
+				return
+			}
+
 			if !tt.wantToken {
 				assert.Nil(t, err, "authorization cookie should not be nil")
 
