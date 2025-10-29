@@ -43,8 +43,9 @@ type Client struct {
 	IDTokenLifetime          int64                   `json:"id_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"id_token_lifetime,default:300"`             // Lifetime of ID tokens in seconds
 	IDTokenSignedResponseAlg *utils.SigningAlgorithm `json:"id_token_signed_response_alg,omitempty" validate:"omitempty,jws" bun:"id_token_signed_response_alg"`    // Signing algorithm for ID tokens
 
-	IsActive       *bool `json:"is_active" bun:"is_active,default:true"`              // Whether the client is active
-	IsConfidential *bool `json:"is_confidential" bun:"is_confidential,default:false"` // Whether the client is confidential
+	IsActive              *bool        `json:"is_active" bun:"is_active,default:true"`                                                    // Whether the client is active
+	IsConfidential        *bool        `json:"is_confidential" bun:"is_confidential,default:false"`                                       // Whether the client is confidential
+	ClientSecretExpiresAt *utils.Epoch `json:"client_secret_expires_at,omitempty" bun:"client_secret_expires_at,default:to_timestamp(0)"` // Expiration time of the client secret
 
 	OwnerID uuid.UUID `json:"-" validate:"required" bun:"owner_id,notnull"`                       // ID of the owner of the client
 	Owner   *User     `json:"owner,omitempty" bun:"rel:belongs-to,join:owner_id=user_id,notnull"` // Owner of the client
@@ -166,7 +167,7 @@ func (c *Client) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 	return nil
 }
 
-func (c *Client) NewSecret(ctx context.Context, db bun.IDB) (string, errors.HTTPError) {
+func (c *Client) NewSecret(ctx context.Context, db bun.IDB, expiresAt ...time.Time) (string, errors.HTTPError) {
 	if c.ID == "" {
 		return "", errors.JSONAPIError{
 			StatusCode: http.StatusBadRequest,
@@ -191,6 +192,11 @@ func (c *Client) NewSecret(ctx context.Context, db bun.IDB) (string, errors.HTTP
 			Title:      "Failed to generate client secret",
 			Detail:     "An error occurred while generating the client secret.",
 		}
+	}
+
+	if len(expiresAt) > 0 {
+		expiration := utils.Epoch(expiresAt[0])
+		c.ClientSecretExpiresAt = &expiration
 	}
 
 	if err := c.save(ctx, db); err != nil {
@@ -273,6 +279,11 @@ func GetClientByIDAndSecret(ctx context.Context, db bun.IDB, id string, secret s
 		ExcludeColumn("client_secret").
 		Where("client.client_id = ?", id).
 		Where("client.client_secret = ?", client.Secret).
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.
+				Where("client.client_secret_expires_at = ?", utils.Epoch(time.Unix(0, 0))).
+				WhereOr("client.client_secret_expires_at > ?", utils.Epoch(time.Now().UTC()))
+		}).
 		Scan(ctx, client)
 
 	if err != nil {

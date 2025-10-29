@@ -169,6 +169,7 @@ CREATE TABLE oidc_clients (
     -- Status
     is_active BOOLEAN DEFAULT TRUE,
     is_confidential BOOLEAN DEFAULT FALSE,
+    client_secret_expires_at TIMESTAMPTZ DEFAULT to_timestamp(0), -- Epoch means never expires
 
     -- Constriant: Client secret must be set for confidential clients
     CONSTRAINT chk_client_secret CHECK (

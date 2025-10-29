@@ -158,6 +158,25 @@ func (e *Epoch) UnmarshalJSON(data []byte) (err error) {
 	return
 }
 
+func (e Epoch) Value() (driver.Value, error) {
+	return time.Time(e), nil
+}
+
+func (e *Epoch) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case time.Time:
+		*e = Epoch(v)
+	default:
+		return fmt.Errorf("unsupported type for Epoch: %T", v)
+	}
+
+	return nil
+}
+
 type EpochMillis time.Time
 
 func (e EpochMillis) MarshalJSON() ([]byte, error) {
@@ -176,6 +195,25 @@ func (e *EpochMillis) UnmarshalJSON(data []byte) (err error) {
 	*e = EpochMillis(time.UnixMilli(epoch))
 
 	return
+}
+
+func (e EpochMillis) Value() (driver.Value, error) {
+	return time.Time(e), nil
+}
+
+func (e *EpochMillis) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case time.Time:
+		*e = EpochMillis(v)
+	default:
+		return fmt.Errorf("unsupported type for EpochMillis: %T", v)
+	}
+
+	return nil
 }
 
 type GrantType string
