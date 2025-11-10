@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -118,13 +118,8 @@ func authenticateUser(ctx context.Context, db bun.IDB, w http.ResponseWriter, r 
 
 	var tokenValue string
 	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" {
-		// extract the token from the "Bearer <token>" format
-		re := regexp.MustCompile(`^Bearer\s*(.+)$`)
-		matches := re.FindStringSubmatch(authHeader)
-		if len(matches) > 1 {
-			tokenValue = matches[1]
-		}
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenValue = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 	}
 
 	if tokenValue != "" {

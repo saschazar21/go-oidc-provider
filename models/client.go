@@ -69,6 +69,8 @@ func (c *Client) newSecret() (string, error) {
 }
 
 func (c *Client) save(ctx context.Context, db bun.IDB, excludedColumns ...string) errors.HTTPError {
+	c.Sanitize()
+
 	if err := c.Validate(); err != nil {
 		log.Printf("Validation error: %v", err)
 		return errors.JSONAPIError{
@@ -207,6 +209,22 @@ func (c *Client) NewSecret(ctx context.Context, db bun.IDB, expiresAt ...time.Ti
 	hashedSecret := utils.HashedString(secret)
 	c.Secret = &hashedSecret
 	return secret, nil
+}
+
+func (c *Client) Sanitize() {
+	c.Name = utils.SanitizeString(c.Name)
+	if c.Description != nil {
+		sanitizedDescription := utils.SanitizeString(*c.Description)
+		c.Description = &sanitizedDescription
+	}
+	if c.URI != nil {
+		sanitizedURI := utils.SanitizeString(*c.URI)
+		c.URI = &sanitizedURI
+	}
+	if c.Logo != nil {
+		sanitizedLogo := utils.SanitizeString(*c.Logo)
+		c.Logo = &sanitizedLogo
+	}
 }
 
 func (c *Client) Save(ctx context.Context, db bun.IDB) errors.HTTPError {

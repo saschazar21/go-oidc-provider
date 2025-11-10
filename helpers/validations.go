@@ -95,6 +95,10 @@ func (ers *endSessionRequest) Validate() (err error) {
 	return
 }
 
+func (tir *tokenIntrospectionRequest) Validate() error {
+	return utils.NewCustomValidator().Struct(tir)
+}
+
 func (tr *tokenRequest) Validate() (err error) {
 	err = utils.NewCustomValidator().Struct(tr)
 

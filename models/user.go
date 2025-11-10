@@ -254,6 +254,46 @@ func (u *User) GetID() string {
 	return u.ID.String()
 }
 
+func (u *User) Sanitize() {
+	sanitizedEmail := utils.SanitizeString(string(*u.Email))
+	u.Email = (*utils.EncryptedString)(&sanitizedEmail)
+
+	if u.PhoneNumber != nil {
+		sanitizedPhone := utils.SanitizeString(*u.PhoneNumber)
+		u.PhoneNumber = &sanitizedPhone
+	}
+
+	if u.GivenName != nil {
+		sanitizedGivenName := utils.SanitizeString(string(*u.GivenName))
+		u.GivenName = (*utils.EncryptedString)(&sanitizedGivenName)
+	}
+
+	if u.FamilyName != nil {
+		sanitizedFamilyName := utils.SanitizeString(string(*u.FamilyName))
+		u.FamilyName = (*utils.EncryptedString)(&sanitizedFamilyName)
+	}
+
+	if u.MiddleName != nil {
+		sanitizedMiddleName := utils.SanitizeString(string(*u.MiddleName))
+		u.MiddleName = (*utils.EncryptedString)(&sanitizedMiddleName)
+	}
+
+	if u.Nickname != nil {
+		sanitizedNickname := utils.SanitizeString(*u.Nickname)
+		u.Nickname = &sanitizedNickname
+	}
+
+	if u.PreferredUsername != nil {
+		sanitizedPreferredUsername := utils.SanitizeString(*u.PreferredUsername)
+		u.PreferredUsername = &sanitizedPreferredUsername
+	}
+
+	if u.Gender != nil {
+		sanitizedGender := utils.SanitizeString(string(*u.Gender))
+		u.Gender = (*utils.EncryptedString)(&sanitizedGender)
+	}
+}
+
 func (u *User) String() string {
 	if u == nil {
 		return ""
@@ -282,6 +322,8 @@ func (u *User) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 			Detail:     "E-Mail address must not be empty",
 		}
 	}
+
+	u.Sanitize()
 
 	email := *u.Email                            // store e-mail before hashing
 	u.EmailHash = (*utils.HashedString)(u.Email) // for avoiding re-hashing the already hashed e-mail
