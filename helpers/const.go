@@ -6,6 +6,7 @@ const (
 	AUTHORIZATION_DECISION_ENDPOINT = "/authorize/decision"
 	AUTHORIZATION_GRANT_ENDPOINT    = "/authorize"
 	TOKEN_ENDPOINT                  = "/token"
+	TOKEN_INTROSPECTION_ENDPOINT    = "/introspect"
 	USERINFO_ENDPOINT               = "/userinfo"
 
 	CONSUME_MAGIC_LINK_ENDPOINT = "/login/magic"

@@ -16,6 +16,7 @@ func HandleAuthorizationDecision(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Allow", "POST")
+		w.WriteHeader(http.StatusNoContent)
 	case http.MethodPost:
 		handleAuthorizationDecision(w, r)
 	default:

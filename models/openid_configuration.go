@@ -14,6 +14,7 @@ type OpenIDConfiguration struct {
 	Issuer                                     string                   `json:"issuer" validate:"required,https_origin"`
 	AuthorizationEndpoint                      string                   `json:"authorization_endpoint" validate:"required,https_url"`
 	TokenEndpoint                              string                   `json:"token_endpoint" validate:"required,https_url"`
+	TokenIntrospectionEndpoint                 string                   `json:"introspection_endpoint" validate:"omitempty,https_url"`
 	UserInfoEndpoint                           string                   `json:"userinfo_endpoint,omitempty" validate:"omitempty,https_url"`
 	JWKSURI                                    string                   `json:"jwks_uri" validate:"required,https_url"`
 	RegistrationEndpoint                       string                   `json:"registration_endpoint,omitempty" validate:"omitempty,https_url"`
@@ -93,6 +94,10 @@ func NewOpenIDConfiguration(customConfig ...*OpenIDConfiguration) (*OpenIDConfig
 
 	if config.TokenEndpoint != "" {
 		config.TokenEndpoint = replaceOrigin(config.TokenEndpoint, issuer)
+	}
+
+	if config.TokenIntrospectionEndpoint != "" {
+		config.TokenIntrospectionEndpoint = replaceOrigin(config.TokenIntrospectionEndpoint, issuer)
 	}
 
 	if config.UserInfoEndpoint != "" {

@@ -16,16 +16,22 @@ func HandleOpenIDConfiguration(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodOptions:
+		origin, err := parseOrigin(r)
+		if err != nil {
+			err.Write(w)
+			return
+		}
+
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		fallthrough
 	case http.MethodHead:
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Allow", "GET, OPTIONS")
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	case http.MethodGet:
 		handleOpenIDConfiguration(w, r)

@@ -13,9 +13,17 @@ import (
 func HandleToken(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodOptions:
+		origin, err := parseOrigin(r)
+
+		if err != nil {
+			err.Write(w)
+			return
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		fallthrough
 	case http.MethodHead:
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")

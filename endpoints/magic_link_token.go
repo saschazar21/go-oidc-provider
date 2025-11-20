@@ -35,14 +35,21 @@ const (
 func HandleMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodOptions:
+		origin, err := parseOrigin(r)
+		if err != nil {
+			err.Write(w)
+			return
+		}
+
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		fallthrough
 	case http.MethodHead:
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Allow", "GET, POST, OPTIONS")
+		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
 		// Handle GET request here
 		handleMagicLinkToken(w, r)

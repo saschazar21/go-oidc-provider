@@ -81,7 +81,7 @@ func TestHandleLogin(t *testing.T) {
 		{
 			name:       "HEAD method",
 			method:     "HEAD",
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusNoContent,
 		},
 		{
 			name:       "POST method with missing email",
