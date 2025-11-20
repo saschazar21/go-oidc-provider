@@ -131,6 +131,26 @@ func TestParseTokenIntrospectionRequest(t *testing.T) {
 			wantActive: true,
 		},
 		{
+			name: "valid token introspection request - client_credentials token",
+			preHook: func(ctx context.Context, db bun.IDB) (string, error) {
+				var token *models.Token
+				var err error
+				if token, err = models.CreateToken(ctx, db, string(utils.CLIENT_CREDENTIALS_TYPE), &client); err != nil {
+					return "", err
+				}
+				return string(token.Value), nil
+			},
+			createHeaders: func(ctx context.Context, db bun.IDB) map[string]string {
+				plain := fmt.Sprintf("%s:%s", client.ID, client.Secret)
+				enc := base64.StdEncoding.EncodeToString([]byte(plain))
+
+				headers := map[string]string{"Authorization": "Basic " + enc, "Content-Type": "application/x-www-form-urlencoded"}
+				return headers
+			},
+			wantStatus: 200,
+			wantActive: true,
+		},
+		{
 			name: "valid token introspection request - jwt token",
 			preHook: func(ctx context.Context, db bun.IDB) (string, error) {
 				jwt, err := idtoken.NewSignedJWTFromAuthorization(&authorization)
@@ -213,7 +233,7 @@ func TestParseTokenIntrospectionRequest(t *testing.T) {
 				headers := map[string]string{"Authorization": "Bearer invalidtokenvalue", "Content-Type": "application/x-www-form-urlencoded"}
 				return headers
 			},
-			wantStatus: 403,
+			wantStatus: 401,
 			wantActive: false,
 		},
 	}

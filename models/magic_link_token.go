@@ -36,9 +36,11 @@ type MagicLinkToken struct {
 	UpdatedAt
 }
 
+var _ bun.AfterScanRowHook = (*MagicLinkToken)(nil)
 var _ bun.BeforeAppendModelHook = (*MagicLinkToken)(nil)
 
 func (m *MagicLinkToken) determineResult(ctx context.Context, db bun.IDB) (*utils.Result, errors.HTTPError) {
+	token := m.Token // store token temporarily, as it will be cleared during NewSelect() scan
 	err := db.NewSelect().
 		Model(m).
 		WherePK().
@@ -84,7 +86,7 @@ func (m *MagicLinkToken) determineResult(ctx context.Context, db bun.IDB) (*util
 	err = db.NewSelect().
 		Model(m).
 		WherePK().
-		Where("token = ?", m.Token).
+		Where("token = ?", token).
 		Column("token_id").
 		Scan(ctx)
 
@@ -212,6 +214,16 @@ func (m *MagicLinkToken) save(ctx context.Context, db bun.IDB) errors.HTTPError 
 	}
 
 	m.Email = &email // Restore email after hashing
+
+	return nil
+}
+
+func (m *MagicLinkToken) AfterScanRow(ctx context.Context) error {
+	if m.User != nil {
+		m.User.Hydrate()
+	}
+
+	m.Token = nil // Clear the token field for obscurity
 
 	return nil
 }

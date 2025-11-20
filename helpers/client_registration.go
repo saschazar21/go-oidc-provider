@@ -112,7 +112,7 @@ func authenticateUser(ctx context.Context, db bun.IDB, w http.ResponseWriter, r 
 	msg := "User is not authenticated."
 	oidcErr := errors.JSONError{
 		StatusCode:  http.StatusUnauthorized,
-		ErrorCode:   errors.INVALID_REQUEST,
+		ErrorCode:   errors.UNAUTHORIZED,
 		Description: &msg,
 	}
 

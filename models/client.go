@@ -54,6 +54,7 @@ type Client struct {
 	UpdatedAt
 }
 
+var _ bun.AfterScanRowHook = (*Client)(nil)
 var _ bun.BeforeAppendModelHook = (*Client)(nil)
 
 func (c *Client) newSecret() (string, error) {
@@ -140,6 +141,16 @@ func (c *Client) save(ctx context.Context, db bun.IDB, excludedColumns ...string
 	}
 
 	c.Secret = nil // Clear the secret before returning to avoid leaking sensitive information
+	return nil
+}
+
+func (c *Client) AfterScanRow(ctx context.Context) error {
+	if c.Owner != nil {
+		c.Owner.Hydrate()
+	}
+
+	c.Secret = nil // Clear the secret before returning to avoid leaking sensitive information
+
 	return nil
 }
 
@@ -276,8 +287,6 @@ func GetClientByID(ctx context.Context, db bun.IDB, id string) (*Client, errors.
 		}
 	}
 
-	client.Secret = nil // Clear the secret before returning to avoid leaking sensitive information
-
 	return client, nil
 }
 
@@ -312,8 +321,6 @@ func GetClientByIDAndSecret(ctx context.Context, db bun.IDB, id string, secret s
 			Detail:     "The specified client/client secret combination does not exist.",
 		}
 	}
-
-	client.Secret = nil // Clear the secret before returning to avoid leaking sensitive information
 
 	return client, nil
 }

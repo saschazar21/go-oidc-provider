@@ -70,6 +70,7 @@ type Token struct {
 	ExpiresAt
 }
 
+var _ bun.AfterScanRowHook = (*Token)(nil)
 var _ bun.AfterSelectHook = (*Token)(nil)
 var _ bun.BeforeAppendModelHook = (*Token)(nil)
 
@@ -183,16 +184,35 @@ func (m *Token) save(ctx context.Context, db bun.IDB, excludeColumns ...string) 
 	return nil
 }
 
-func (m *Token) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
-	model := query.GetModel().Value()
+func (m *Token) AfterScanRow(ctx context.Context) error {
+	if m.User != nil {
+		m.User.Hydrate()
+	}
+	if m.Client != nil && m.Client.Owner != nil {
+		m.Client.Owner.Hydrate()
+	}
+	if m.Authorization != nil {
+		if m.Authorization.User != nil {
+			m.Authorization.User.Hydrate()
+		}
+		if m.Authorization.Client != nil && m.Authorization.Client.Owner != nil {
+			m.Authorization.Client.Owner.Hydrate()
+		}
+	}
 
-	t, ok := model.(*Token)
+	return nil
+}
+
+func (m *Token) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
+	model, ok := query.GetModel().Value().(*Token)
 	if !ok {
 		log.Println("AfterSelect: model is not a Token")
 		return nil
 	}
 
-	if t == nil {
+	m = model
+
+	if m == nil {
 		log.Println("AfterSelect: Token is nil")
 		msg := "Failed to update token in database."
 		return errors.JSONError{
@@ -202,7 +222,7 @@ func (m *Token) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
 		}
 	}
 
-	if t.Value == utils.HashedString("") && t.ID == uuid.Nil {
+	if m.Value == utils.HashedString("") && m.ID == uuid.Nil {
 		log.Println("AfterSelect: Token ID is nil and/or Value is empty")
 		return nil
 	}
@@ -214,10 +234,10 @@ func (m *Token) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
 		Set("last_used_at = ?", time.Now().UTC()).
 		OmitZero()
 
-	if t.ID != uuid.Nil {
-		q = q.Where("\"token\".\"token_id\" = ?", t.ID)
+	if m.ID != uuid.Nil {
+		q = q.Where("\"token\".\"token_id\" = ?", m.ID)
 	} else {
-		q = q.Where("\"token\".\"token_value\" = ?", t.Value)
+		q = q.Where("\"token\".\"token_value\" = ?", m.Value)
 	}
 
 	var result sql.Result

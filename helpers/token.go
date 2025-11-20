@@ -51,7 +51,7 @@ func (tr *tokenRequest) clientCredentials(ctx context.Context, db bun.IDB) (map[
 	msg := "Client authentication failed."
 	clientErr := errors.JSONError{
 		StatusCode:  http.StatusUnauthorized,
-		ErrorCode:   errors.INVALID_CLIENT,
+		ErrorCode:   errors.UNAUTHORIZED,
 		Description: &msg,
 		Headers: map[string]string{
 			"WWW-Authenticate": `Basic realm="token", charset="UTF-8"`,
@@ -443,7 +443,7 @@ func ParseTokenRequest(r *http.Request) (*tokenRequest, errors.OIDCError) {
 		log.Printf("%s", msg)
 		return nil, errors.JSONError{
 			StatusCode:  http.StatusUnauthorized,
-			ErrorCode:   errors.INVALID_CLIENT,
+			ErrorCode:   errors.UNAUTHORIZED,
 			Description: &msg,
 			Headers: map[string]string{
 				"WWW-Authenticate": `Basic realm="token", charset="UTF-8"`,

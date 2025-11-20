@@ -61,6 +61,7 @@ type Authorization struct {
 	ExpiresAt
 }
 
+var _ bun.AfterScanRowHook = (*Authorization)(nil)
 var _ bun.BeforeAppendModelHook = (*Authorization)(nil)
 
 func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db bun.IDB) errors.OIDCError {
@@ -136,6 +137,22 @@ func (a *Authorization) deactivatePreviousAuthorizations(ctx context.Context, db
 
 	a.ReplacedID = replacedAuthorizations[0].ID
 	a.ReplacedAuthorization = &replacedAuthorizations[0]
+
+	return nil
+}
+
+func (a *Authorization) AfterScanRow(ctx context.Context) error {
+	if a.User != nil {
+		a.User.Hydrate()
+	}
+
+	if a.Client != nil && a.Client.Owner != nil {
+		a.Client.Owner.Hydrate()
+	}
+
+	if a.ReplacedAuthorization != nil && a.ReplacedAuthorization.User != nil {
+		a.ReplacedAuthorization.User.Hydrate()
+	}
 
 	return nil
 }
@@ -256,6 +273,7 @@ func GetAuthorizationByID(ctx context.Context, db bun.IDB, id string) (*Authoriz
 		Where("\"authorization\".\"authorization_id\" = ?", id).
 		Relation("Client").
 		Relation("User").
+		Relation("Client.Owner").
 		Relation("ReplacedAuthorization").
 		Scan(ctx)
 
@@ -285,6 +303,7 @@ func GetAuthorizationByClientAndUser(ctx context.Context, db bun.IDB, clientID s
 		Where("\"authorization\".\"client_id\" = ? AND \"authorization\".\"user_id\" = ? AND \"authorization\".\"is_active\" = ?", clientID, userID, true).
 		Relation("Client").
 		Relation("User").
+		Relation("Client.Owner").
 		Relation("ReplacedAuthorization").
 		Scan(ctx)
 

@@ -44,6 +44,7 @@ type Session struct {
 	UpdatedAt
 }
 
+var _ bun.AfterScanRowHook = (*Session)(nil)
 var _ bun.AfterSelectHook = (*Session)(nil)
 var _ bun.BeforeAppendModelHook = (*Session)(nil)
 
@@ -109,15 +110,26 @@ func (s *Session) save(ctx context.Context, db bun.IDB, excludeColumns ...string
 	return nil
 }
 
-func (s *Session) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
-	model := query.GetModel().Value()
+func (s *Session) AfterScanRow(ctx context.Context) error {
+	if s.User != nil {
+		s.User.Hydrate()
+	}
 
-	s, ok := model.(*Session)
+	if s.Client != nil && s.Client.Owner != nil {
+		s.Client.Owner.Hydrate()
+	}
+
+	return nil
+}
+
+func (s *Session) AfterSelect(ctx context.Context, query *bun.SelectQuery) error {
+	model, ok := query.GetModel().Value().(*Session)
 	if !ok {
 		log.Println("AfterSelect: model is not a Session")
 
 		return nil
 	}
+	s = model
 
 	if s.ID == uuid.Nil {
 		log.Println("AfterSelect: Session ID is nil")

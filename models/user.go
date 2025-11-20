@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -163,11 +164,7 @@ func (u *User) formatName() {
 }
 
 func (u *User) AfterScanRow(ctx context.Context) error {
-	u.formatName()
-
-	if u.Address != nil {
-		u.Address.formatAddress()
-	}
+	u.Hydrate()
 
 	return nil
 }
@@ -252,6 +249,16 @@ func (u *User) GetID() string {
 		return ""
 	}
 	return u.ID.String()
+}
+
+func (u *User) Hydrate() {
+	if u.Name == nil {
+		u.formatName()
+	}
+
+	if u.Address != nil && u.Address.Formatted == nil {
+		u.Address.formatAddress()
+	}
 }
 
 func (u *User) Sanitize() {
@@ -346,6 +353,25 @@ func (u *User) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 	}
 
 	return nil
+}
+
+func (u *User) Write(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+
+	if err := json.NewEncoder(w).Encode(u); err != nil {
+		msg := "Failed to encode user to JSON"
+		log.Printf("%s: %v", msg, err)
+		err := errors.JSONError{
+			StatusCode:  http.StatusInternalServerError,
+			ErrorCode:   errors.SERVER_ERROR,
+			Description: &msg,
+		}
+
+		err.Write(w)
+		return
+	}
 }
 
 func storeUserDataInDB(ctx context.Context, db bun.IDB, model ValidatabaleModelWithID) errors.HTTPError {

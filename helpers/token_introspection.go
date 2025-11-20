@@ -7,8 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/idtoken"
@@ -206,10 +204,10 @@ func validateTokenIntrospectionAuthorization(ctx context.Context, db bun.IDB, r 
 		msg := "Missing Authorization header"
 		return errors.JSONError{
 			StatusCode:  http.StatusUnauthorized,
-			ErrorCode:   errors.INVALID_REQUEST,
+			ErrorCode:   errors.UNAUTHORIZED,
 			Description: &msg,
 			Headers: map[string]string{
-				"WWW-Authenticate": `Basic realm="token_introspection"`,
+				"WWW-Authenticate": `Basic realm="token_introspection", charset="UTF-8"`,
 			},
 		}
 	}
@@ -228,63 +226,11 @@ func validateTokenIntrospectionAuthorization(ctx context.Context, db bun.IDB, r 
 
 	msg := "Invalid authorization for token introspection"
 	return errors.JSONError{
-		StatusCode:  http.StatusForbidden,
-		ErrorCode:   errors.INVALID_REQUEST,
+		StatusCode:  http.StatusUnauthorized,
+		ErrorCode:   errors.UNAUTHORIZED,
 		Description: &msg,
+		Headers: map[string]string{
+			"WWW-Authenticate": `Basic realm="token_introspection", charset="UTF-8"`,
+		},
 	}
-}
-
-func validateBearerToken(ctx context.Context, db bun.IDB, r *http.Request) (token *models.Token, err error) {
-	auth := r.Header.Get("Authorization")
-	if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
-		msg := "No valid bearer token provided in Authorization header"
-		log.Printf("%s", msg)
-		return nil, fmt.Errorf("%s", msg)
-	}
-
-	bearer := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
-
-	var claims *idtoken.Claims
-	if claims, err = idtoken.ParseJWT(bearer); err == nil && claims != nil {
-		log.Printf("Bearer token is a valid JWT.")
-		isActive := true
-		scope := []utils.Scope(claims.Scope)
-		return &models.Token{
-			IsActive:  &isActive,
-			Scope:     &scope,
-			Type:      utils.ACCESS_TOKEN_TYPE,
-			Value:     utils.HashedString(bearer),
-			ClientID:  &claims.Audience[0],
-			UserID:    &claims.User.ID,
-			CreatedAt: models.CreatedAt{CreatedAt: time.Time(claims.IssuedAt)},
-			ExpiresAt: models.ExpiresAt{ExpiresAt: time.Time(claims.ExpiresAt)},
-		}, nil
-	}
-
-	if token, err = models.GetTokenByValue(ctx, db, bearer); err != nil || token == nil {
-		msg := "Invalid bearer token"
-		log.Printf("%s: %v", msg, err)
-		return nil, fmt.Errorf("%s", msg)
-	}
-
-	return token, nil
-}
-
-func validateClientCredentials(ctx context.Context, db bun.IDB, r *http.Request) (client *models.Client, err error) {
-	var clientId, clientSecret string
-	var ok bool
-
-	if clientId, clientSecret, ok = r.BasicAuth(); !ok {
-		msg := "No valid client credentials provided in Authorization header"
-		log.Printf("%s", msg)
-		return nil, fmt.Errorf("%s", msg)
-	}
-
-	if client, err = models.GetClientByIDAndSecret(ctx, db, clientId, clientSecret); err != nil || client == nil {
-		msg := "Invalid client credentials"
-		log.Printf("%s for client ID %s: %v", msg, clientId, err)
-		return nil, fmt.Errorf("%s", msg)
-	}
-
-	return client, nil
 }
