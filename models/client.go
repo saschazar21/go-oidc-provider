@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -22,7 +23,7 @@ const (
 type Client struct {
 	bun.BaseModel `bun:"table:oidc_clients"`
 
-	ID            string                `json:"client_id" bun:"client_id,pk"`
+	ID            string                `json:"client_id,omitempty" bun:"client_id,pk"`
 	Name          string                `json:"client_name" validate:"required" bun:"client_name,notnull"`                                                                    // Name of the client, used for display purposes
 	Secret        *utils.HashedString   `json:"-" bun:"client_secret,type:bytea"`                                                                                             // Hashed
 	Description   *string               `json:"client_description,omitempty" bun:"client_description,type:text"`                                                              // Optional description of the client
@@ -38,13 +39,13 @@ type Client struct {
 	IsAuthTimeRequired bool `json:"require_auth_time,omitempty" bun:"require_auth_time"`    // Whether the client requires auth time
 	IsPKCERequired     bool `json:"require_pkce,omitempty" bun:"require_pkce,default:true"` // Whether the client requires PKCE
 
-	AccessTokenLifetime      int64                   `json:"access_token_lifetime" validate:"omitempty,gt=0" bun:"access_token_lifetime,default:3600"`              // Lifetime of access tokens in seconds
+	AccessTokenLifetime      int64                   `json:"access_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"access_token_lifetime,default:3600"`    // Lifetime of access tokens in seconds
 	RefreshTokenLifetime     int64                   `json:"refresh_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"refresh_token_lifetime,default:86400"` // Lifetime of refresh tokens in seconds
 	IDTokenLifetime          int64                   `json:"id_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"id_token_lifetime,default:300"`             // Lifetime of ID tokens in seconds
 	IDTokenSignedResponseAlg *utils.SigningAlgorithm `json:"id_token_signed_response_alg,omitempty" validate:"omitempty,jws" bun:"id_token_signed_response_alg"`    // Signing algorithm for ID tokens
 
-	IsActive              *bool        `json:"is_active" bun:"is_active,default:true"`                                                    // Whether the client is active
-	IsConfidential        *bool        `json:"is_confidential" bun:"is_confidential,default:false"`                                       // Whether the client is confidential
+	IsActive              *bool        `json:"is_active,omitempty" bun:"is_active,default:true"`                                          // Whether the client is active
+	IsConfidential        *bool        `json:"is_confidential,omitempty" bun:"is_confidential,default:false"`                             // Whether the client is confidential
 	ClientSecretExpiresAt *utils.Epoch `json:"client_secret_expires_at,omitempty" bun:"client_secret_expires_at,default:to_timestamp(0)"` // Expiration time of the client secret
 
 	OwnerID uuid.UUID `json:"-" validate:"required" bun:"owner_id,notnull"`                       // ID of the owner of the client
@@ -260,6 +261,15 @@ func (c *Client) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 	}
 
 	return c.save(ctx, db, "client_secret")
+}
+
+func (c Client) String() string {
+	client := fmt.Sprintf("\"%s\" – (ID: %s", c.Name, c.ID)
+	if c.Secret != nil {
+		client = fmt.Sprintf("%s, Secret: %s", client, c.Secret.String())
+	}
+	client = fmt.Sprintf("%s)", client)
+	return client
 }
 
 func GetClientByID(ctx context.Context, db bun.IDB, id string) (*Client, errors.HTTPError) {

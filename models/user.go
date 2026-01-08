@@ -20,12 +20,12 @@ type Address struct {
 
 	ID            uuid.UUID              `json:"-" bun:"address_id,type:uuid,pk,default:gen_random_uuid()"`
 	UserID        uuid.UUID              `json:"-" bun:"user_id,type:uuid,notnull"`
-	StreetAddress *utils.EncryptedString `json:"street_address" bun:"street_address"` // encrypt
-	Locality      *utils.EncryptedString `json:"locality" bun:"locality"`             // encrypt
-	Region        *utils.EncryptedString `json:"region" bun:"region"`                 // encrypt
-	PostalCode    *utils.EncryptedString `json:"postal_code" bun:"postal_code"`       // encrypt
-	Country       *string                `json:"country" bun:"country"`               // encrypt
-	Formatted     *string                `json:"formatted" bun:"-"`
+	StreetAddress *utils.EncryptedString `json:"street_address,omitempty" bun:"street_address"` // encrypt
+	Locality      *utils.EncryptedString `json:"locality,omitempty" bun:"locality"`             // encrypt
+	Region        *utils.EncryptedString `json:"region,omitempty" bun:"region"`                 // encrypt
+	PostalCode    *utils.EncryptedString `json:"postal_code,omitempty" bun:"postal_code"`       // encrypt
+	Country       *string                `json:"country,omitempty" bun:"country"`               // encrypt
+	Formatted     *string                `json:"formatted,omitempty" bun:"-"`
 
 	*CreatedAt // Pointer to avoid marshaling zero value in JWT
 	*UpdatedAt // Pointer to avoid marshaling zero value in JWT
@@ -106,11 +106,11 @@ func (a *Address) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
 type User struct {
 	bun.BaseModel `bun:"table:oidc_users"`
 
-	ID                    uuid.UUID              `json:"sub" bun:"user_id,type:uuid,pk,default:gen_random_uuid()"`
+	ID                    uuid.UUID              `json:"sub,omitempty" bun:"user_id,type:uuid,pk,default:gen_random_uuid()"`
 	Email                 *utils.EncryptedString `json:"email,omitempty" validate:"required,email" bun:"email,type:bytea,unique,notnull"` // encrypt
 	EmailHash             *utils.HashedString    `json:"-" bun:"email_hash,type:bytea,unique,notnull"`                                    // hashed base64-url-encoded
 	IsEmailVerified       *bool                  `json:"email_verified,omitempty" bun:"email_verified,notnull"`
-	PhoneNumber           *string                `json:"phone_number,omitempty" validate:"omitempty,e164" bun:"phone_number,type:bytea,unique"` // encrypt
+	PhoneNumber           *utils.EncryptedString `json:"phone_number,omitempty" validate:"omitempty,e164" bun:"phone_number,type:bytea,unique"` // encrypt
 	IsPhoneNumberVerified *bool                  `json:"phone_number_verified,omitempty" bun:"phone_number_verified"`
 	GivenName             *utils.EncryptedString `json:"given_name,omitempty" validate:"omitempty,alphanumunicode" bun:"given_name,type:bytea"`   // encrypt
 	FamilyName            *utils.EncryptedString `json:"family_name,omitempty" validate:"omitempty,alphanumunicode" bun:"family_name,type:bytea"` // encrypt
@@ -266,8 +266,8 @@ func (u *User) Sanitize() {
 	u.Email = (*utils.EncryptedString)(&sanitizedEmail)
 
 	if u.PhoneNumber != nil {
-		sanitizedPhone := utils.SanitizeString(*u.PhoneNumber)
-		u.PhoneNumber = &sanitizedPhone
+		sanitizedPhone := utils.SanitizeString(string(*u.PhoneNumber))
+		u.PhoneNumber = (*utils.EncryptedString)(&sanitizedPhone)
 	}
 
 	if u.GivenName != nil {
@@ -301,19 +301,19 @@ func (u *User) Sanitize() {
 	}
 }
 
-func (u *User) String() string {
-	if u == nil {
-		return ""
-	}
+func (u User) String() string {
+	var stringified string
 
-	if u.Name == nil {
-		u.formatName()
-	}
+	if u.GivenName != nil && u.FamilyName != nil {
+		if u.Name == nil {
+			u.formatName()
+		}
 
-	stringified := *u.Name
+		stringified = *u.Name
+	}
 
 	if stringified == "" {
-		stringified = fmt.Sprintf("%s %s", string(*u.GivenName), string(*u.FamilyName))
+		stringified = "\"\""
 	}
 
 	stringified = fmt.Sprintf("[%s]: %s (%s)", u.ID.String(), stringified, string(*u.Email))
