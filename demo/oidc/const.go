@@ -15,5 +15,5 @@ const (
 
 	RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-	URL_PATH_CALLBACK = "/oidc/callback"
+	URL_PATH_CALLBACK = "/callback"
 )

@@ -1,0 +1,13 @@
+# Redirects from sub-paths to user-friendly ones
+/authorize                         /.netlify/functions/authorization            200!
+/authorize/decision                /.netlify/functions/authorization_decision   200!
+/callback                          /.netlify/functions/callback                 200!
+/logout                            /.netlify/functions/end_session              200!
+/.well-known/jwks.json             /.netlify/functions/jwks                     200!
+/login                             /.netlify/functions/login                    200!
+/login/magic                       /.netlify/functions/magic_link_token         200!
+/.well-known/openid-configuration  /.netlify/functions/openid_configuration     200!
+/token                             /.netlify/functions/token                    200!
+/introspect                        /.netlify/functions/token_introspection      200!
+/userinfo                          /.netlify/functions/userinfo                 200!
+/                                  /.netlify/functions/index                    200!

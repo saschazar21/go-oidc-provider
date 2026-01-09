@@ -30,17 +30,13 @@ func getIssuerURL() *url.URL {
 }
 
 func GetCallbackURL() string {
-	deploymentURL := utils.GetDeploymentURL()
-	if deploymentURL == "" {
+	issuerURL := getIssuerURL()
+	if issuerURL == nil {
+		log.Printf("issuer URL returned nil")
 		return ""
 	}
-	parsedURL, err := url.Parse(deploymentURL)
-	if err != nil {
-		log.Printf("failed to parse deployment URL: %v", err)
-		return ""
-	}
-	parsedURL.Path = URL_PATH_CALLBACK
-	return parsedURL.String()
+	issuerURL.Path = URL_PATH_CALLBACK
+	return issuerURL.String()
 }
 
 func RandomString(n int) string {

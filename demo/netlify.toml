@@ -1,0 +1,20 @@
+[build]
+  command = "make"
+  functions = "functions"
+  publish = "public"
+
+[build.environment]
+  CGO_ENABLED = "0"
+  # GO_IMPORT_PATH = "github.com/saschazar21/go-oidc-provider"
+  GO111MODULE = "on"
+  GOARCH = "amd64"
+  GOOS = "linux"
+
+[template.environment]
+  DEMO_MODE = "true to enable demo mode for this application"
+  DB_URL = "The database connection string for the application to use. Example: postgres://user:password@host:port/dbname?sslmode=disable"
+  MASTER_KEY = "The master key used for encrypting sensitive data in the database. Must be 32 bytes long and encoded in base64."
+  COOKIE_AUTH_KEY = "The authentication key used for signing cookies. Must be 32 or 64 bytes long and encoded in base64."
+  KEY_ES256 = "The ECDSA P-256 private key used for signing tokens with the ES256 algorithm, encoded in PEM format."
+  OIDC_CLIENT_ID = "The client ID for the OIDC client used by the demo application. Must be present in the database."
+  OIDC_CLIENT_SECRET = "The client secret for the OIDC client used by the demo application."

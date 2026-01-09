@@ -1,0 +1,15 @@
+{
+  "name": "go-oidc-demo",
+  "version": "1.0.0",
+  "description": "A demo application for the Go OIDC Provider",
+  "scripts": {
+    "deploy": "netlify deploy --prod"
+  },
+  "keywords": [],
+  "author": "Sascha Zarhuber <saschazar21@yahoo.de> (https://sascha.work)",
+  "license": "MIT",
+  "packageManager": "pnpm@10.26.0",
+  "dependencies": {
+    "netlify-cli": "^23.13.3"
+  }
+}
