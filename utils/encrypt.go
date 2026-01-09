@@ -22,7 +22,7 @@ func createGCM() (cipher.AEAD, error) {
 	}
 
 	if len(decoded) != 32 {
-		log.Fatalf("MASTER_KEY env must be set and exactly 32 bytes long!")
+		log.Fatalf("MASTER_KEY env must be set and exactly 32 bytes long! Received %d bytes...", len(decoded))
 	}
 
 	aesBlock, err := aes.NewCipher(decoded)

@@ -99,16 +99,17 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 		}
 	}
 
-	if client.IsConfidential != nil && *client.IsConfidential && (ar.authorization.ClientSecret == nil || *ar.authorization.ClientSecret == "") {
-		msg := "Client secret is required for confidential clients."
-		log.Printf("%s", msg)
+	// TODO: check if client_secret check is needed here
+	// if client.IsConfidential != nil && *client.IsConfidential && (ar.authorization.ClientSecret == nil || *ar.authorization.ClientSecret == "") {
+	// 	msg := "Client secret is required for confidential clients."
+	// 	log.Printf("%s", msg)
 
-		return errors.OIDCErrorResponse{
-			ErrorCode:        errors.INVALID_CLIENT,
-			ErrorDescription: &msg,
-			RedirectURI:      ar.authorization.RedirectURI,
-		}
-	}
+	// 	return errors.OIDCErrorResponse{
+	// 		ErrorCode:        errors.INVALID_CLIENT,
+	// 		ErrorDescription: &msg,
+	// 		RedirectURI:      ar.authorization.RedirectURI,
+	// 	}
+	// }
 
 	if (client.IsPKCERequired != nil && *client.IsPKCERequired) && (ar.authorization.CodeChallenge == nil || *ar.authorization.CodeChallenge == "") {
 		msg := "PKCE is required for this client, but no code_challenge provided."
