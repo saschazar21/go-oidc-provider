@@ -110,7 +110,7 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 		}
 	}
 
-	if client.IsPKCERequired && (ar.authorization.CodeChallenge == nil || *ar.authorization.CodeChallenge == "") {
+	if (client.IsPKCERequired != nil && *client.IsPKCERequired) && (ar.authorization.CodeChallenge == nil || *ar.authorization.CodeChallenge == "") {
 		msg := "PKCE is required for this client, but no code_challenge provided."
 		log.Printf("%s", msg)
 

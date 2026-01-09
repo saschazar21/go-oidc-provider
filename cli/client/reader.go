@@ -14,24 +14,24 @@ import (
 )
 
 func readOwner(ctx context.Context, db bun.IDB, reader *bufio.Reader, client *models.Client) {
-	email, err := cli.ReadLine(reader, "Owner (e-mail address)")
-	if err != nil {
-		fmt.Printf("Error reading Owner: %v\n", err)
-		os.Exit(1)
-	}
-	if email == "" {
-		fmt.Println("Owner is required, exiting...")
-		os.Exit(1)
-	}
+	var user *models.User
+	for {
+		email, err := cli.ReadLine(reader, "Owner (e-mail address)")
+		if err != nil {
+			fmt.Printf("Error reading Owner: %v\n", err)
+			os.Exit(1)
+		}
+		if email == "" {
+			fmt.Println("Owner is required, exiting...")
+			os.Exit(1)
+		}
 
-	user, err := models.GetUserByEmail(ctx, db, email)
-	if err != nil {
-		fmt.Printf("Error fetching user by e-mail address: %v\n", err)
-		os.Exit(1)
-	}
-	if user == nil {
-		fmt.Println("No user found with the provided e-mail address, exiting...")
-		os.Exit(1)
+		user, err = models.GetUserByEmail(ctx, db, email)
+		if err != nil {
+			fmt.Printf("Error fetching user by e-mail address: %v\nCheck your input and try again...\n", email)
+		} else {
+			break
+		}
 	}
 
 	client.OwnerID = user.ID
@@ -97,7 +97,7 @@ func readSecondary(reader *bufio.Reader, client *models.Client) {
 	}
 
 	client.IsConfidential = &isConfidential
-	client.IsPKCERequired = isPKCERequired
+	client.IsPKCERequired = &isPKCERequired
 
 	grantTypes, err := cli.ReadLine(reader, "Allowed Grant Types (comma-separated for multiple)", "authorization_code", "implicit", "client_credentials", "refresh_token")
 	if err != nil {

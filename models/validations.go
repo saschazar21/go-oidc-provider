@@ -84,7 +84,7 @@ func (a *Authorization) Validate() errors.OIDCError {
 		}
 	}
 
-	if a.Client.IsPKCERequired && (a.CodeChallenge == nil || *a.CodeChallenge == "") {
+	if (a.Client.IsPKCERequired != nil && *a.Client.IsPKCERequired) && (a.CodeChallenge == nil || *a.CodeChallenge == "") {
 		description := "PKCE is required for this client, but no code_challenge provided"
 		log.Println(description)
 		return errors.OIDCErrorResponse{
@@ -130,10 +130,89 @@ func (a *Authorization) Validate() errors.OIDCError {
 	return nil
 }
 
-func (c *Client) Validate() (err error) {
-	err = utils.NewCustomValidator().Struct(c)
+func (c *Client) Validate() errors.OIDCError {
+	err := utils.NewCustomValidator().Struct(c)
 
-	return
+	if err != nil {
+		log.Printf("Validation error in client: %v", err)
+		switch t := err.(type) {
+		case *validator.InvalidValidationError:
+			description := t.Error()
+			return errors.OIDCErrorResponse{
+				ErrorCode:        errors.INVALID_REQUEST,
+				ErrorDescription: &description,
+			}
+		case *validator.ValidationErrors:
+			firstError := (*t)[0]
+			description := fmt.Sprintf("invalid %s: %s", firstError.Field(), firstError.Value())
+			return errors.OIDCErrorResponse{
+				ErrorCode:        errors.INVALID_REQUEST,
+				ErrorDescription: &description,
+			}
+		default:
+			description := "invalid client"
+			return errors.OIDCErrorResponse{
+				ErrorCode:        errors.INVALID_REQUEST,
+				ErrorDescription: &description,
+			}
+		}
+	}
+
+	if (utils.ContainsValue(*c.GrantTypes, utils.CLIENT_CREDENTIALS) || utils.ContainsValue(*c.GrantTypes, utils.REFRESH_TOKEN)) && (c.IsConfidential == nil || !*c.IsConfidential) {
+		description := "public clients cannot use client_credentials or refresh_token grant type"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &description,
+		}
+	}
+
+	if utils.ContainsValue(*c.GrantTypes, utils.REFRESH_TOKEN) && !utils.ContainsValue(*c.GrantTypes, utils.AUTHORIZATION_CODE) && !utils.ContainsValue(*c.GrantTypes, utils.CLIENT_CREDENTIALS) {
+		description := "refresh_token grant type requires authorization_code or client_credentials grant type"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &description,
+		}
+	}
+
+	if utils.ContainsValue(*c.ResponseTypes, utils.TOKEN) && !utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) {
+		description := "response_type 'token' requires 'implicit' grant type"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &description,
+		}
+	}
+
+	if utils.ContainsValue(*c.ResponseTypes, utils.CODE_TOKEN) && !(utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) && utils.ContainsValue(*c.GrantTypes, utils.AUTHORIZATION_CODE)) {
+		description := "response_type 'code token' requires 'implicit' and 'authorization_code' grant types"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &description,
+		}
+	}
+
+	if utils.ContainsValue(*c.ResponseTypes, utils.CODE_ID_TOKEN) && !(utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) && utils.ContainsValue(*c.GrantTypes, utils.AUTHORIZATION_CODE)) {
+		description := "response_type 'code id_token' requires 'implicit' and 'authorization_code' grant types"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &description,
+		}
+	}
+
+	if utils.ContainsValue(*c.ResponseTypes, utils.CODE_ID_TOKEN_TOKEN) && !(utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) && utils.ContainsValue(*c.GrantTypes, utils.AUTHORIZATION_CODE)) {
+		description := "response_type 'code id_token token' requires 'implicit' and 'authorization_code' grant types"
+		log.Println(description)
+		return errors.OIDCErrorResponse{
+			ErrorCode:        errors.INVALID_REQUEST,
+			ErrorDescription: &description,
+		}
+	}
+
+	return nil
 }
 
 func (m *MagicLinkToken) Validate() (err error) {

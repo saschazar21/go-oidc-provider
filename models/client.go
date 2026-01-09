@@ -36,8 +36,8 @@ type Client struct {
 	RedirectURIs           []string `json:"redirect_uris" validate:"required,dive,uri" bun:"redirect_uris,type:text[]"`                                    // List of redirect URIs for the client
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris,omitempty" validate:"omitempty,dive,uri" bun:"post_logout_redirect_uris,type:text[]"` // List of post logout redirect URIs for the client
 
-	IsAuthTimeRequired bool `json:"require_auth_time,omitempty" bun:"require_auth_time"`    // Whether the client requires auth time
-	IsPKCERequired     bool `json:"require_pkce,omitempty" bun:"require_pkce,default:true"` // Whether the client requires PKCE
+	IsAuthTimeRequired *bool `json:"require_auth_time,omitempty" bun:"require_auth_time"`    // Whether the client requires auth time
+	IsPKCERequired     *bool `json:"require_pkce,omitempty" bun:"require_pkce,default:true"` // Whether the client requires PKCE
 
 	AccessTokenLifetime      int64                   `json:"access_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"access_token_lifetime,default:3600"`    // Lifetime of access tokens in seconds
 	RefreshTokenLifetime     int64                   `json:"refresh_token_lifetime,omitempty" validate:"omitempty,gt=0" bun:"refresh_token_lifetime,default:86400"` // Lifetime of refresh tokens in seconds
