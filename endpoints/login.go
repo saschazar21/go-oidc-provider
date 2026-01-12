@@ -6,30 +6,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/helpers"
 	"github.com/saschazar21/go-oidc-provider/utils"
-)
-
-const (
-	DEFAULT_LOGIN_TEMPLATE = `<!DOCTYPE html>
-<html lang="en">
-<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>Login</title>
-</head>
-<body>
-		<h1>Login</h1>
-		<form method="POST" action="{{ .FormPostURI }}">
-			<label for="email">E-Mail:</label>
-			<input type="email" id="email" name="email" required autofocus>
-			<button type="submit">Login</button>
-		</form>
-</body>
-</html>`
 )
 
 func HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -77,8 +59,10 @@ func handleLogin(w http.ResponseWriter, _ *http.Request) {
 	// Implementation of the login endpoint /login
 	templateData := struct {
 		FormPostURI string
+		Year        int
 	}{
 		FormPostURI: helpers.LOGIN_ENDPOINT,
+		Year:        time.Now().UTC().Year(),
 	}
 
 	tmpl, err := template.New("login").Parse(DEFAULT_LOGIN_TEMPLATE)

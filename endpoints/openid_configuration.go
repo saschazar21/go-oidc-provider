@@ -53,11 +53,12 @@ func HandleOpenIDConfiguration(w http.ResponseWriter, r *http.Request) {
 
 func handleOpenIDConfiguration(w http.ResponseWriter, _ *http.Request) {
 	customConfig := &models.OpenIDConfiguration{
-		JWKSURI:               helpers.JWKS_ENDPOINT,
-		AuthorizationEndpoint: helpers.AUTHORIZATION_GRANT_ENDPOINT,
-		TokenEndpoint:         helpers.TOKEN_ENDPOINT,
-		UserInfoEndpoint:      helpers.USERINFO_ENDPOINT,
-		EndSessionEndpoint:    helpers.LOGOUT_ENDPOINT,
+		JWKSURI:                    helpers.JWKS_ENDPOINT,
+		AuthorizationEndpoint:      helpers.AUTHORIZATION_GRANT_ENDPOINT,
+		TokenEndpoint:              helpers.TOKEN_ENDPOINT,
+		TokenIntrospectionEndpoint: helpers.TOKEN_INTROSPECTION_ENDPOINT,
+		UserInfoEndpoint:           helpers.USERINFO_ENDPOINT,
+		EndSessionEndpoint:         helpers.LOGOUT_ENDPOINT,
 		ResponseTypesSupported: []utils.ResponseType{
 			utils.CODE,
 			utils.ID_TOKEN,

@@ -4,32 +4,13 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/helpers"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
-)
-
-const (
-	DEFAULT_MAGIC_LINK_TEMPLATE = `<!DOCTYPE html>
-<html lang="en">
-<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>Magic Link</title>
-</head>
-<body>
-		<h1>Magic Link</h1>
-		<form method="POST" action="{{ .FormPostURI }}">
-			<label for="token">Token:</label>
-			<input type="text" id="token" name="token" value="{{ .Token }}" required autofocus>
-			<input type="hidden" name="id" value="{{ .ID }}">
-			<button type="submit">Submit</button>
-		</form>
-</body>
-</html>`
 )
 
 func HandleMagicLinkToken(w http.ResponseWriter, r *http.Request) {
@@ -77,10 +58,12 @@ func handleMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 		FormPostURI string
 		Token       string
 		ID          string
+		Year        int
 	}{
 		FormPostURI: helpers.CONSUME_MAGIC_LINK_ENDPOINT,
 		Token:       r.FormValue("token"),
 		ID:          r.FormValue("id"),
+		Year:        time.Now().UTC().Year(),
 	}
 
 	tmpl, err := template.New("magic_link").Parse(DEFAULT_MAGIC_LINK_TEMPLATE)

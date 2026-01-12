@@ -16,9 +16,9 @@ type OIDCError interface {
 
 type OIDCErrorResponse struct {
 	ErrorCode        OIDCErrorCode `json:"error" schema:"error,required"`
-	ErrorDescription *string       `json:"error_description,omitempty" schema:"error_description"`
-	ErrorURI         *string       `json:"error_uri,omitempty" validate:"omitempty,http_url" schema:"error_uri"`
-	State            *string       `json:"state,omitempty" schema:"state"`
+	ErrorDescription *string       `json:"error_description,omitempty" schema:"error_description,omitempty"`
+	ErrorURI         *string       `json:"error_uri,omitempty" validate:"omitempty,http_url" schema:"error_uri,omitempty"`
+	State            *string       `json:"state,omitempty" schema:"state,omitempty"`
 
 	RedirectURI string `json:"-" validate:"http_url" schema:"-"`
 	IsFragment  bool   `json:"-" schema:"-"`

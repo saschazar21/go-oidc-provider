@@ -157,8 +157,8 @@ CREATE TABLE oidc_clients (
     require_pkce BOOLEAN DEFAULT TRUE,
     
     -- Token configuration
-    access_token_lifetime INT DEFAULT 3600, -- 1 hour
-    refresh_token_lifetime INT DEFAULT 86400, -- 24 hours
+    access_token_lifetime INT DEFAULT 600, -- 10 minutes
+    refresh_token_lifetime INT DEFAULT 2592000, -- 30 days
     id_token_lifetime INT DEFAULT 300, -- 5 minutes
     id_token_signed_response_alg oidc_id_token_signed_response_alg,
     

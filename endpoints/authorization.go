@@ -4,39 +4,13 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/helpers"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
-)
-
-const (
-	DEFAULT_AUTHORIZATION_TEMPLATE = `<!DOCTYPE html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>Authorize {{ .Client.Name }}</title>
-	</head>
-	<body>
-		<h1>Authorize {{ .Client.Name }}</h1>
-		<p>Application <strong>{{ .Client.Name }}</strong> is requesting access to your account.</p>
-		{{ if gt (len .Scope) 0 }}
-		<h2>Requested scopes:</h2>
-		<ul>
-			{{ range .Scope }}
-			<li>{{ . }}</li>
-			{{ end }}
-		</ul>
-		{{ end }}
-		<form method="POST" action="{{ .FormPostURI }}">
-			<button type="submit" name="action" value="approved">Approve</button>
-			<button type="submit" name="action" value="denied">Deny</button>
-		</form>
-	</body>
-</html>`
 )
 
 func HandleAuthorization(w http.ResponseWriter, r *http.Request) {
@@ -135,10 +109,12 @@ func handleAuthorization(w http.ResponseWriter, r *http.Request) {
 		FormPostURI string
 		Client      *models.Client
 		Scope       []utils.Scope
+		Year        int
 	}{
 		FormPostURI: helpers.AUTHORIZATION_DECISION_ENDPOINT,
 		Client:      auth.Client,
 		Scope:       auth.Scope,
+		Year:        time.Now().UTC().Year(),
 	}
 
 	tmpl, err := template.New("authorization").Parse(DEFAULT_AUTHORIZATION_TEMPLATE)
