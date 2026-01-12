@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -116,6 +117,17 @@ func (m *MagicLinkWhitelist) Save(ctx context.Context, db bun.IDB) errors.HTTPEr
 	*m.Email = email // restore e-mail after encryption
 
 	return nil
+}
+
+func (m MagicLinkWhitelist) String() string {
+	str := fmt.Sprintf("\"%s\" expires at %s]", string(*m.Email), m.ExpiresAt.ExpiresAt.Format(time.RFC822))
+	if m.Reason != nil {
+		str += fmt.Sprintf("\nReason: %s", *m.Reason)
+	}
+	if m.Notes != nil {
+		str += fmt.Sprintf("\nNotes: %s", *m.Notes)
+	}
+	return str
 }
 
 func DeleteMagicLinkWhitelistByEmail(ctx context.Context, db bun.IDB, email string) errors.HTTPError {
