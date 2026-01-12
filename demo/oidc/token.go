@@ -9,6 +9,11 @@ import (
 	"github.com/gorilla/schema"
 )
 
+type HasOIDCClientCredentials interface {
+	GetClientID() string
+	GetClientSecret() string
+}
+
 // oidcTokenRequest represents the request to the token endpoint
 type oidcTokenRequest struct {
 	GrantType    string `schema:"grant_type"`
@@ -16,6 +21,14 @@ type oidcTokenRequest struct {
 	RedirectURI  string `schema:"redirect_uri"`
 	ClientID     string `schema:"client_id"`
 	ClientSecret string `schema:"client_secret"`
+}
+
+func (r oidcTokenRequest) GetClientID() string {
+	return r.ClientID
+}
+
+func (r oidcTokenRequest) GetClientSecret() string {
+	return r.ClientSecret
 }
 
 func (r *oidcTokenRequest) WithClientID(clientID string) *oidcTokenRequest {
@@ -59,6 +72,10 @@ func (r *oidcTokenRequest) ExchangeCode() (*oidcTokenResponse, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
 		return nil, err
 	}
+
+	tokenResponse.ClientID = r.ClientID
+	tokenResponse.ClientSecret = r.ClientSecret
+
 	return &tokenResponse, nil
 }
 
@@ -92,6 +109,16 @@ type oidcTokenResponse struct {
 	TokenType    string `json:"token_type" schema:"token_type"`
 	ExpiresIn    int    `json:"expires_in" schema:"expires_in"`
 	RefreshToken string `json:"refresh_token" schema:"refresh_token"`
+	ClientID     string `json:"-" schema:"-"`
+	ClientSecret string `json:"-" schema:"-"`
+}
+
+func (r oidcTokenResponse) GetClientID() string {
+	return r.ClientID
+}
+
+func (r oidcTokenResponse) GetClientSecret() string {
+	return r.ClientSecret
 }
 
 func (r oidcTokenResponse) String() string {

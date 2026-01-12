@@ -1,74 +1,20 @@
 package endpoints
 
 import (
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/saschazar21/go-oidc-demo/oidc"
 )
 
-const DEFAULT_HTML_TEMPLATE_CALLBACK_SUCCESS = `<!DOCTYPE html>
-<html lang="en">
-<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>OIDC Authentication Success</title>
-		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gardevoir" />
-</head>
-<body>
-		<header>
-			<h1>OIDC Authentication successful!</h1>
-		</header>
-		<main>
-			<p>You have successfully authenticated with the OIDC provider. It responded with the following data:</p>
-			<br />
-			<br />
-			<pre><code>{{ .OIDCResponse }}</code></pre>
-			<br />
-			<br />
-			<p>You can close this window now, or start over again on the <a href="/">home page</a>.</p>
-		</main>
-		<hr />
-		<footer>
-		<p>&copy; {{ .Year }} <a href="https://sascha.work" rel="noopener noreferrer" target="_blank">Sascha Zarhuber</a></p>
-		</footer>
-</body>
-</html>
-`
-
-const DEFAULT_HTML_TEMPLATE_CALLBACK_ERROR = `<!DOCTYPE html>
-<html lang="en">
-<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>OIDC Authentication Error</title>
-		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gardevoir" />
-</head>
-<body>
-		<header>
-			<h1>OIDC Authentication failed!</h1>
-		</header>
-		<main>
-			<p>An error occurred during authentication with the OIDC provider. It responded with the following data:</p>
-			<br />
-			<br />
-			<pre><code>{{ .OIDCResponse }}</code></pre>
-			<br />
-			<br />
-			<p>You can close this window now, or start over again on the <a href="/">home page</a>.</p>
-		</main>
-		<hr />
-		<footer>
-		<p>&copy; {{ .Year }} <a href="https://sascha.work" rel="noopener noreferrer" target="_blank">Sascha Zarhuber</a></p>
-		</footer>
-</body>
-</html>
-`
-
 type CallbackTemplateData struct {
 	Year         int
 	OIDCResponse string
+	ClientID     string
+	ClientSecret string
 }
 
 func renderCallbackTemplate(w http.ResponseWriter, data interface{}) {
@@ -91,7 +37,24 @@ func renderCallbackTemplate(w http.ResponseWriter, data interface{}) {
 		return
 	}
 
-	err = tpl.Execute(w, data)
+	oidcResponse, err := json.MarshalIndent(data, "", "    ")
+	if err != nil {
+		log.Printf("failed to marshal callback data: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	callbackData := CallbackTemplateData{
+		Year:         time.Now().UTC().Year(),
+		OIDCResponse: string(oidcResponse),
+	}
+
+	if res, ok := data.(oidc.HasOIDCClientCredentials); ok {
+		callbackData.ClientID = res.GetClientID()
+		callbackData.ClientSecret = res.GetClientSecret()
+	}
+
+	err = tpl.Execute(w, callbackData)
 	if err != nil {
 		log.Printf("failed to execute callback template: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -116,7 +79,7 @@ func HandleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("received OIDC error response: %v", oidcErr)
-		renderCallbackTemplate(w, err)
+		renderCallbackTemplate(w, oidcErr)
 		return
 	}
 
