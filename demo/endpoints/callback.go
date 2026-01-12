@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/saschazar21/go-oidc-demo/oidc"
+	"github.com/saschazar21/go-oidc-provider/errors"
 )
 
 type CallbackTemplateData struct {
@@ -75,7 +76,12 @@ func HandleCallback(w http.ResponseWriter, r *http.Request) {
 		err := oidc.ParseCallbackRequest(r, &oidcErr)
 		if err != nil {
 			log.Printf("failed to parse error callback request: %v", err)
-			http.Error(w, "Bad Request", http.StatusBadRequest)
+			descr := "Malformatted error response"
+			oidcErr = oidc.OIDCErrorResponse{
+				ID:               string(errors.SERVER_ERROR),
+				ErrorDescription: &descr,
+			}
+			renderCallbackTemplate(w, oidcErr)
 			return
 		}
 		log.Printf("received OIDC error response: %v", oidcErr)
@@ -87,7 +93,12 @@ func HandleCallback(w http.ResponseWriter, r *http.Request) {
 	err := oidc.ParseCallbackRequest(r, &res)
 	if err != nil {
 		log.Printf("failed to parse callback request: %v", err)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		descr := "Malformatted callback request"
+		oidcErr := oidc.OIDCErrorResponse{
+			ID:               string(errors.INVALID_REQUEST),
+			ErrorDescription: &descr,
+		}
+		renderCallbackTemplate(w, oidcErr)
 		return
 	}
 
@@ -105,7 +116,12 @@ func HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 		if state == "" || state != res.State {
 			log.Printf("state mismatch: expected %v, got %v", state, res.State)
-			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+			descr := "State mismatch"
+			oidcErr := oidc.OIDCErrorResponse{
+				ID:               string(errors.INVALID_REQUEST),
+				ErrorDescription: &descr,
+			}
+			renderCallbackTemplate(w, oidcErr)
 			return
 		}
 	}

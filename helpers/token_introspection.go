@@ -55,6 +55,9 @@ func (tir *tokenIntrospectionRequest) fetchToken(ctx context.Context, db bun.IDB
 		issuer = utils.GetDeploymentURL()
 	}
 
+	issuedAt := utils.Epoch(token.CreatedAt.CreatedAt)
+	expiresAt := utils.Epoch(token.ExpiresAt.ExpiresAt)
+
 	res := tokenIntrospectionResponse{
 		Active:    true,
 		Scope:     scope,
@@ -62,8 +65,8 @@ func (tir *tokenIntrospectionRequest) fetchToken(ctx context.Context, db bun.IDB
 		Client:    clientId,
 		Sub:       subject,
 		TokenType: token.Type,
-		IssuedAt:  utils.Epoch(token.CreatedAt.CreatedAt),
-		ExpiresAt: utils.Epoch(token.ExpiresAt.ExpiresAt),
+		IssuedAt:  &issuedAt,
+		ExpiresAt: &expiresAt,
 	}
 
 	return &res, nil
@@ -89,8 +92,8 @@ func (tir *tokenIntrospectionRequest) parseJWT() (*tokenIntrospectionResponse, e
 		Client:    jwt.Audience[0],
 		Sub:       sub,
 		TokenType: utils.ACCESS_TOKEN_TYPE,
-		IssuedAt:  jwt.IssuedAt,
-		ExpiresAt: jwt.ExpiresAt,
+		IssuedAt:  &jwt.IssuedAt,
+		ExpiresAt: &jwt.ExpiresAt,
 	}
 
 	return &res, nil
@@ -128,8 +131,8 @@ type tokenIntrospectionResponse struct {
 	Client    string           `json:"client_id,omitempty"`
 	Sub       string           `json:"sub,omitempty"`
 	TokenType utils.TokenType  `json:"token_type,omitempty" validate:"omitempty,token_type"`
-	IssuedAt  utils.Epoch      `json:"iat,omitempty"`
-	ExpiresAt utils.Epoch      `json:"exp,omitempty"`
+	IssuedAt  *utils.Epoch     `json:"iat,omitempty"`
+	ExpiresAt *utils.Epoch     `json:"exp,omitempty"`
 }
 
 func (tir *tokenIntrospectionResponse) Write(w http.ResponseWriter) error {

@@ -330,14 +330,14 @@ func TestParseTokenIntrospectionRequest(t *testing.T) {
 							assert.Equal(t, utils.ScopeSlice(token.Authorization.Scope), tir.Scope, "Scope does not match")
 						}
 
-						assert.Equal(t, token.CreatedAt.CreatedAt.Unix(), time.Time(tir.IssuedAt).Unix(), "IssuedAt does not match token creation time")
-						assert.Equal(t, token.ExpiresAt.ExpiresAt.Unix(), time.Time(tir.ExpiresAt).Unix(), "ExpiresAt does not match token expiry time")
+						assert.Equal(t, token.CreatedAt.CreatedAt.Unix(), (*time.Time)(tir.IssuedAt).Unix(), "IssuedAt does not match token creation time")
+						assert.Equal(t, token.ExpiresAt.ExpiresAt.Unix(), (*time.Time)(tir.ExpiresAt).Unix(), "ExpiresAt does not match token expiry time")
 					} else if claims != nil {
 						assert.Equal(t, claims.Scope, tir.Scope, "Scope does not match")
 						assert.Equal(t, claims.User.ID.String(), tir.Sub, "Subject does not match")
 						assert.Equal(t, claims.Audience[0], tir.Client, "Client ID does not match")
-						assert.Equal(t, time.Time(claims.IssuedAt).Unix(), time.Time(tir.IssuedAt).Unix(), "IssuedAt does not match")
-						assert.Equal(t, time.Time(claims.ExpiresAt).Unix(), time.Time(tir.ExpiresAt).Unix(), "ExpiresAt does not match")
+						assert.Equal(t, time.Time(claims.IssuedAt).Unix(), (*time.Time)(tir.IssuedAt).Unix(), "IssuedAt does not match")
+						assert.Equal(t, time.Time(claims.ExpiresAt).Unix(), (*time.Time)(tir.ExpiresAt).Unix(), "ExpiresAt does not match")
 					}
 				}
 			}
