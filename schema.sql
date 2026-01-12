@@ -144,7 +144,7 @@ CREATE TABLE oidc_clients (
     owner_id UUID NOT NULL REFERENCES oidc_users(user_id) ON DELETE CASCADE,
     
     -- Auth types
-    grant_types oidc_grant_type[] DEFAULT ARRAY['authorization_code'::oidc_grant_type, 'refresh_token'::oidc_grant_type],
+    grant_types oidc_grant_type[] DEFAULT ARRAY['authorization_code'::oidc_grant_type],
     response_types oidc_response_type[] DEFAULT ARRAY['code'::oidc_response_type],
     token_endpoint_auth_method oidc_auth_method DEFAULT 'client_secret_basic'::oidc_auth_method,
     

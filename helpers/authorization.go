@@ -99,18 +99,6 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 		}
 	}
 
-	// TODO: check if client_secret check is needed here
-	// if client.IsConfidential != nil && *client.IsConfidential && (ar.authorization.ClientSecret == nil || *ar.authorization.ClientSecret == "") {
-	// 	msg := "Client secret is required for confidential clients."
-	// 	log.Printf("%s", msg)
-
-	// 	return errors.OIDCErrorResponse{
-	// 		ErrorCode:        errors.INVALID_CLIENT,
-	// 		ErrorDescription: &msg,
-	// 		RedirectURI:      ar.authorization.RedirectURI,
-	// 	}
-	// }
-
 	if (client.IsPKCERequired != nil && *client.IsPKCERequired) && (ar.authorization.CodeChallenge == nil || *ar.authorization.CodeChallenge == "") {
 		msg := "PKCE is required for this client, but no code_challenge provided."
 		log.Printf("%s", msg)
@@ -380,6 +368,8 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 			RedirectURI:      auth.RedirectURI,
 		}
 	}
+
+	auth.ReplacedAuthorization = nil // clear replaced authorization to avoid deep validation errors (e.g. expires_at, etc...)
 
 	// Store the (intermediate) authorization in the database
 	if err := auth.Save(ctx, db); err != nil {

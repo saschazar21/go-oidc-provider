@@ -500,20 +500,6 @@ func TestAuthorizationRequest(t *testing.T) {
 			WantErr: true,
 		},
 		{
-			Name:   "Missing Client Secret",
-			Method: http.MethodGet,
-			Params: createParams(url.Values{
-				"client_id":    {client.ID},
-				"redirect_uri": {client.RedirectURIs[0]},
-			}),
-			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
-				if err := createUserSession(ctx, db, r, &user); err != nil {
-					t.Fatalf("Failed to save session: %v", err)
-				}
-			},
-			WantErr: true,
-		},
-		{
 			Name:   "Missing Redirect URI",
 			Method: http.MethodGet,
 			Params: createParams(url.Values{

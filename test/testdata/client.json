@@ -3,7 +3,7 @@
   "client_description": "A demo web application for Acme Corp using OIDC authentication.",
   "client_uri": "https://app.acme-demo.com",
   "logo_uri": "https://app.acme-demo.com/logo.png",
-  "grant_types": ["authorization_code", "refresh_token"],
+  "grant_types": ["authorization_code", "implicit", "refresh_token"],
   "response_types": ["code", "code token"],
   "token_endpoint_auth_method": "client_secret_basic",
   "redirect_uris": [
