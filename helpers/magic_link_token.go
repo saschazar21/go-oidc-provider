@@ -232,6 +232,7 @@ func CreateMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWriter
 	var uid string
 
 	if validateEmail(ctx, db, req.Email) {
+		log.Printf("Attempting to create magic link token for e-mail address %s (IP: %s, User-Agent: %s)", req.Email, ipAddress, userAgent)
 		magicLink, err = models.CreateMagicLinkToken(ctx, db, req.Email, ipAddress, userAgent)
 		if err != nil {
 			log.Println("Failed to create magic link token.")
