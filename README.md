@@ -105,6 +105,6 @@ A deployed version of the demo can be accessed at [https://go-oidc-demo.netlify.
 
 ## License
 
-&copy; 2026 Sascha Zarhuber.
+Copyright &copy; 2026 Sascha Zarhuber.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
