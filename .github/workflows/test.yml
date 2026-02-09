@@ -1,0 +1,75 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+jobs:
+  test:
+    name: Run unit tests
+    uses: ./.github/workflows/ci.yml
+
+  coverage-comment:
+    name: Coverage Report Comment
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod # re-uses the same version as in ci.yml
+          check-latest: true
+          cache: false
+
+      - name: Download coverage files
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-files
+          path: coverage/ # downloads into ./coverage/
+
+      - name: Show basic coverage in logs (debug)
+        run: |
+          ls -l coverage/
+          go tool cover -func=coverage/coverage.out | tail -n 3 || true
+
+      - name: Create coverage comment body
+        id: make-comment
+        run: |
+          TOTAL=$(go tool cover -func=coverage/coverage.out | tail -1 | awk '{print $3}' || echo "??.?%")
+
+          {
+            echo "### Code Coverage Report"
+            echo ""
+            echo "**Total coverage**: ${TOTAL}"
+            echo ""
+            echo '```text'
+            go tool cover -func=coverage/coverage.out | grep -v '^total:' | sort -k 3 -r | head -n 12 || echo "(no packages found)"
+            echo '```'
+            echo ""
+            echo "<details>"
+            echo "<summary>Full func-level output</summary>"
+            echo '```text'
+            cat coverage/coverage.out || echo "coverage.out not found"
+            echo '```'
+            echo "</details>"
+            echo ""
+            echo "*Generated from \`make test\` — [view HTML locally](./coverage/coverage.html?raw=true)*"
+          } > comment.md
+
+      - name: Post or update comment on PR
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-file: comment.md
+          edit-mode: replace
