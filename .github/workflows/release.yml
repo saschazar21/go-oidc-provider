@@ -1,0 +1,226 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    name: Changelog
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    uses: ./.github/workflows/changelog.yml
+    with:
+      args: -v --bump --tag-pattern="v[0-9].*"
+
+  tag:
+    name: Tag
+    runs-on: ubuntu-latest
+    needs:
+      - changelog
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Git
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          set +e
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: |
+            go.sum
+
+      - name: Tidy & Commit go.mod
+        run: |
+          go mod tidy
+
+          sed -i 's|require github.com/${{ github.repository }} v[0-9.]*[-a-zA-Z0-9]*|require github.com/${{ github.repository }} ${{ needs.changelog.outputs.version }}|g' go.mod
+          git add go.mod go.sum
+          git commit -m "Update go.mod go.sum [skip ci]"
+          git push
+
+      - name: Commit CHANGELOG.md
+        run: |
+          echo "${{ needs.changelog.outputs.content }}" > CHANGELOG.md
+
+          git add CHANGELOG.md
+          git commit -m "Update CHANGELOG.md [skip ci]"
+          git push
+
+      - name: Create Tag
+        id: tag
+        run: |
+          git tag ${{ needs.changelog.outputs.version }}
+          git push origin ${{ needs.changelog.outputs.version }}
+
+  changes:
+    name: Latest Changes
+    needs:
+      - tag
+
+    uses: ./.github/workflows/changelog.yml
+    with:
+      args: -v --latest --strip all
+
+  compile:
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    name: Build ${{ matrix.os }} / ${{ matrix.arch }}${{ matrix.ver && format('-v{0}', matrix.ver) || '' }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, windows, darwin]
+        arch: [amd64, arm64]
+        exclude:
+          - os: darwin
+            arch: 386 # just example — add real excludes if needed
+          - os: windows
+            arch: arm # usually not needed
+        include:
+          # Add 32-bit arm if you need it (GOARM=7 or 6)
+          - os: linux
+            arch: arm
+            ver: 7
+          # - os: linux
+          #   arch: arm
+          #   ver: 6
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: |
+            **/go.sum
+
+      - name: Build all CLI applications
+        id: build
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          GOARM: ${{ matrix.ver || '' }} # only set when needed
+        run: |
+          # Helper function to generate suffix
+          get_suffix() {
+            local base="$1"
+            local os="$2"
+            local arch="$3"
+            local ver="$4"
+
+            local suffix=""
+            case "$arch" in
+              amd64) suffix="-amd64" ;;
+              arm64) suffix="-arm64" ;;
+              arm)   suffix="-armv${ver}" ;;
+              *)     suffix="-${arch}" ;;
+            esac
+
+            if [ "$os" = "windows" ]; then
+              echo "${base}${suffix}.exe"
+            else
+              echo "${base}${suffix}"
+            fi
+          }
+
+          # Build each binary
+          for cmd in client magic-link-whitelist user; do
+            binary_dir="cli/${cmd}"
+            output_name="$(get_suffix "${cmd}" "${GOOS}" "${GOARCH}" "${GOARM}")"
+
+            echo "Building ${cmd} → ${output_name}"
+
+            # For linux/arm we need GOARM
+            if [ "${GOOS}" = "linux" ] && [ "${GOARCH}" = "arm" ]; then
+              GOARM="${GOARM}" go build -trimpath -o "${output_name}" "${binary_dir}/main.go"
+            else
+              go build -trimpath -o "${output_name}" "${binary_dir}/main.go"
+            fi
+
+            # Optional: chmod +x (mostly for non-windows artifacts)
+            [ "${GOOS}" != "windows" ] && chmod +x "${output_name}" || true
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ver && format('-armv{0}', matrix.ver) || '' }}
+          path: |
+            client*
+            magic-link-whitelist*
+            user*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
+
+release:
+  name: Release
+  runs-on: ubuntu-latest
+  needs:
+    - changes
+    - compile
+  # Add your release condition here, e.g.:
+  # if: needs.changes.outputs.should_release == 'true'   # or github.ref == 'refs/heads/main' etc.
+  permissions:
+    contents: write # Required to create releases and upload assets
+
+  steps:
+    - name: Download all matrix artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: binaries-* # matches binaries-linux-amd64, binaries-windows-arm64, etc.
+        path: all-binaries/
+        merge-multiple: true # ← this is important: flattens all files into one directory
+
+    - name: List downloaded binaries # optional – very useful for debugging
+      run: |
+        echo "Downloaded files:"
+        ls -l all-binaries/ | sort
+        echo ""
+        find all-binaries/ -type f
+
+    - name: Create or update GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ needs.changes.outputs.version }}
+        name: Release ${{ needs.changes.outputs.version }}
+        body: ${{ needs.changes.outputs.content || 'Automated release' }}
+        draft: false
+        prerelease: false
+        fail_on_unmatched_files: true
+        files: |
+          all-binaries/client*
+          all-binaries/magic-link-whitelist*
+          all-binaries/user*
+
+  release-go:
+    name: Release Go package
+    runs-on: ubuntu-latest
+    needs:
+      - changelog
+      - tag
+
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v6
+
+      - name: Publish
+        id: publish
+        env:
+          GOPROXY: proxy.golang.org
+        run: |
+          go list -m github.com/${{ github.repository }}@${{ needs.changelog.outputs.version }}

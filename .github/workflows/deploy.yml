@@ -1,0 +1,87 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  outputs:
+    name: "Set outputs"
+    uses: ./.github/workflows/outputs.yml
+
+  ci:
+    name: "Run unit tests"
+    uses: ./.github/workflows/ci.yml
+
+  netlify:
+    name: "Deploy to Netlify"
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+    needs:
+      - outputs
+      - ci
+    outputs:
+      deploy_id: ${{ steps.deploy.outputs.deploy_id }}
+      deploy_url: ${{ steps.deploy.outputs.deploy_url }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".tool-versions"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: demo
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: |
+            go.sum
+        working-directory: demo
+
+      - name: Set deploy variables
+        id: var
+        run: |
+          deploy_message="${{ needs.outputs.outputs.short_sha }} – ${{ needs.outputs.outputs.message }}"
+
+          prod_flag="--prod"
+          context_flag="--context=production"
+          alias_flag=""
+
+          echo "deploy_message=$deploy_message" >> $GITHUB_OUTPUT
+          echo "prod_flag=$prod_flag" >> $GITHUB_OUTPUT
+          echo "context_flag=$context_flag" >> $GITHUB_OUTPUT
+          echo "alias_flag=$alias_flag" >> $GITHUB_OUTPUT
+        working-directory: demo
+
+      - name: Deploy to Netlify
+        id: deploy
+        run: |
+          pnpm netlify deploy \
+            --build \
+            ${{ steps.var.outputs.prod_flag }} \
+            ${{ steps.var.outputs.context_flag }} \
+            ${{ steps.var.outputs.alias_flag }} \
+            --message="${{ steps.var.outputs.deploy_message }}" \
+            --telemetry-disable \
+            --json \
+            > netlify.json
+
+          echo "deploy_id=$(jq -r '.deploy_id' netlify.json)" >> $GITHUB_OUTPUT
+          echo "deploy_url=$(jq -r '.deploy_url' netlify.json)" >> $GITHUB_OUTPUT
+        working-directory: demo
