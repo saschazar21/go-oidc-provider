@@ -52,7 +52,6 @@ jobs:
           check-latest: true
           cache-dependency-path: |
             go.sum
-        working-directory: demo
 
       - name: Set deploy variables
         id: var
