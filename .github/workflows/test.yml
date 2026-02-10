@@ -57,44 +57,55 @@ jobs:
           # Using the raw coverage.out (mode: atomic + file:line.col,line.col count hit)
           awk '
             BEGIN {
-              # Initialize all packages
-              pkgs["cli"] = 0; cov["cli"] = 0;
-              pkgs["db"] = 0; cov["db"] = 0;
-              pkgs["endpoints"] = 0; cov["endpoints"] = 0;
-              pkgs["errors"] = 0; cov["errors"] = 0;
-              pkgs["helpers"] = 0; cov["helpers"] = 0;
-              pkgs["idtoken"] = 0; cov["idtoken"] = 0;
-              pkgs["models"] = 0; cov["models"] = 0;
-              pkgs["utils"] = 0; cov["utils"] = 0;
+              # Initialize per-package accumulators
+              pkg_stmts["cli"] = 0;     pkg_hits["cli"] = 0;
+              pkg_stmts["db"] = 0;      pkg_hits["db"] = 0;
+              pkg_stmts["endpoints"] = 0; pkg_hits["endpoints"] = 0;
+              pkg_stmts["errors"] = 0;    pkg_hits["errors"] = 0;
+              pkg_stmts["helpers"] = 0;   pkg_hits["helpers"] = 0;
+              pkg_stmts["idtoken"] = 0;   pkg_hits["idtoken"] = 0;
+              pkg_stmts["models"] = 0;    pkg_hits["models"] = 0;
+              pkg_stmts["utils"] = 0;     pkg_hits["utils"] = 0;
             }
 
             # Only process valid coverage lines
-            $1 ~ /^github\.com\/saschazar21\/go-oidc-provider\// && $2 ~ /^[0-9.]+$/ && $3 ~ /^[0-9]+$/ {
+            $1 ~ /^github\.com\/saschazar21\/go-oidc-provider\// && $2 ~ /^[0-9.,]+$/ && $3 ~ /^[0-9]+$/ {
               file = $1;
-              stmts = $2 + 0;
-              hits  = $3 + 0;
+              stmts_block = $2 + 0;
+              hits_block  = $3 + 0;
 
-              # Extract the package name (the directory right after the repo name)
-              match(file, /^github\.com\/saschazar21\/go-oidc-provider\/([^\/]+)/, arr);
-              pkg = arr[1];
-
-              if (pkg != "" && pkg in pkgs) {
-                pkgs[pkg] += stmts;
-                cov[pkg] += hits;
+              # Aggregate per file first (critical!)
+              if (!(file in file_stmts)) {
+                file_stmts[file] = 0;
+                file_hits[file]  = 0;
               }
+              file_stmts[file] += stmts_block;
+              file_hits[file]  += hits_block;
             }
 
             END {
+              # Now map each file to its package (once per file)
+              for (f in file_stmts) {
+                # Extract package name (first dir after repo name)
+                match(f, /^github\.com\/saschazar21\/go-oidc-provider\/([^\/]+)/, arr);
+                pkg = arr[1];
+                if (pkg != "" && pkg in pkg_stmts) {
+                  pkg_stmts[pkg] += file_stmts[f];
+                  pkg_hits[pkg]  += file_hits[f];
+                }
+              }
+
+              # Output markdown table
               print "| Package     | Coverage  |";
               print "|-------------|-----------|";
 
-              # Fixed order (highest coverage first based on expected values)
+              # Display order (highest expected first)
               split("db helpers models idtoken endpoints cli errors utils", order, " ");
 
-              for (i=1; i<=length(order); i++) {
+              for (i = 1; i <= length(order); i++) {
                 p = order[i];
-                if (pkgs[p] > 0) {
-                  pct = (cov[p] / pkgs[p]) * 100;
+                if (pkg_stmts[p] > 0) {
+                  pct = (pkg_hits[p] / pkg_stmts[p]) * 100;
                   printf "| ./%-9s | %6.1f%% |\n", p, pct;
                 } else {
                   printf "| ./%-9s |   0.0%% |\n", p;
