@@ -57,51 +57,47 @@ jobs:
           # Using the raw coverage.out (mode: atomic + file:line.col,line.col count hit)
           # Aggregate and sort package coverage automatically
           awk '
-            BEGIN { FS=" " }
+          NR == 1 { next }  # skip "mode: atomic"
 
-            # Skip mode line
-            NR == 1 { next }
+          {
+            # Split "file:range"
+            split($1, a, ":")
+            file = a[1]
 
-            {
-              split($1, a, ":")
-              file = a[1]
+            stmts = $2 + 0
+            hits  = $3 + 0
 
-              stmts = $2 + 0
-              hits  = $3 + 0
+            total[file] += stmts
+            if (hits > 0) covered[file] += stmts
+          }
 
-              file_total[file] += stmts
-              if (hits > 0) {
-                file_covered[file] += stmts
-              }
+          END {
+            for (f in total) {
+              # remove module prefix → leaves pkg/path/file.go
+              sub(/^github\.com\/[^\/]+\/[^\/]+\//, "", f)
+
+              split(f, p, "/")
+              pkg = p[1]
+
+              pkg_total[pkg] += total[f]
+              pkg_covered[pkg] += covered[f]
             }
 
-            END {
-              # Collapse files into top-level packages
-              for (f in file_total) {
-                sub(/^github\.com\/saschazar21\/go-oidc-provider\//, "", f)
-                split(f, parts, "/")
-                pkg = parts[1]
-
-                pkg_total[pkg] += file_total[f]
-                pkg_covered[pkg] += file_covered[f]
-              }
-
-              # Emit sortable rows: pct|pkg|covered|total
-              for (p in pkg_total) {
-                pct = (pkg_total[p] > 0) ? (pkg_covered[p] / pkg_total[p]) * 100 : 0
-                printf "%06.2f|%s|%d|%d\n", pct, p, pkg_covered[p], pkg_total[p]
-              }
+            for (pkg in pkg_total) {
+              pct = (pkg_total[pkg] > 0) ? (pkg_covered[pkg] / pkg_total[pkg]) * 100 : 0
+              printf "%07.2f|%s\n", pct, pkg
             }
+          }
           ' coverage/coverage.out \
           | sort -t'|' -nr \
           | awk -F'|' '
-            BEGIN {
-              print "| Package | Coverage |"
-              print "|---------|----------|"
-            }
-            {
-              printf "| ./%s | %5.1f%% |\n", $2, $1
-            }
+          BEGIN {
+            print "| Package | Coverage |"
+            print "|---------|----------|"
+          }
+          {
+            printf "| ./%s | %5.1f%% |\n", $2, $1
+          }
           ' > table.md
 
           # Build final comment
