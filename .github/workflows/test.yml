@@ -55,64 +55,54 @@ jobs:
 
           # Aggregate statement coverage per top-level package
           # Using the raw coverage.out (mode: atomic + file:line.col,line.col count hit)
+          # Aggregate and sort package coverage automatically
           awk '
-            BEGIN {
-              # Initialize per-package accumulators
-              pkg_stmts["cli"] = 0;     pkg_hits["cli"] = 0;
-              pkg_stmts["db"] = 0;      pkg_hits["db"] = 0;
-              pkg_stmts["endpoints"] = 0; pkg_hits["endpoints"] = 0;
-              pkg_stmts["errors"] = 0;    pkg_hits["errors"] = 0;
-              pkg_stmts["helpers"] = 0;   pkg_hits["helpers"] = 0;
-              pkg_stmts["idtoken"] = 0;   pkg_hits["idtoken"] = 0;
-              pkg_stmts["models"] = 0;    pkg_hits["models"] = 0;
-              pkg_stmts["utils"] = 0;     pkg_hits["utils"] = 0;
-            }
+            BEGIN { FS=" " }
 
-            # Only process valid coverage lines
-            $1 ~ /^github\.com\/saschazar21\/go-oidc-provider\// && $2 ~ /^[0-9.,]+$/ && $3 ~ /^[0-9]+$/ {
-              file = $1;
-              stmts_block = $2 + 0;
-              hits_block  = $3 + 0;
+            # Skip mode line
+            NR == 1 { next }
 
-              # Aggregate per file first (critical!)
-              if (!(file in file_stmts)) {
-                file_stmts[file] = 0;
-                file_hits[file]  = 0;
+            {
+              split($1, a, ":")
+              file = a[1]
+
+              stmts = $2 + 0
+              hits  = $3 + 0
+
+              file_total[file] += stmts
+              if (hits > 0) {
+                file_covered[file] += stmts
               }
-              file_stmts[file] += stmts_block;
-              file_hits[file]  += hits_block;
             }
 
             END {
-              # Now map each file to its package (once per file)
-              for (f in file_stmts) {
-                # Extract package name (first dir after repo name)
-                match(f, /^github\.com\/saschazar21\/go-oidc-provider\/([^\/]+)/, arr);
-                pkg = arr[1];
-                if (pkg != "" && pkg in pkg_stmts) {
-                  pkg_stmts[pkg] += file_stmts[f];
-                  pkg_hits[pkg]  += file_hits[f];
-                }
+              # Collapse files into top-level packages
+              for (f in file_total) {
+                sub(/^github\.com\/saschazar21\/go-oidc-provider\//, "", f)
+                split(f, parts, "/")
+                pkg = parts[1]
+
+                pkg_total[pkg] += file_total[f]
+                pkg_covered[pkg] += file_covered[f]
               }
 
-              # Output markdown table
-              print "| Package     | Coverage  |";
-              print "|-------------|-----------|";
-
-              # Display order (highest expected first)
-              split("db helpers models idtoken endpoints cli errors utils", order, " ");
-
-              for (i = 1; i <= length(order); i++) {
-                p = order[i];
-                if (pkg_stmts[p] > 0) {
-                  pct = (pkg_hits[p] / pkg_stmts[p]) * 100;
-                  printf "| ./%-9s | %6.1f%% |\n", p, pct;
-                } else {
-                  printf "| ./%-9s |   0.0%% |\n", p;
-                }
+              # Emit sortable rows: pct|pkg|covered|total
+              for (p in pkg_total) {
+                pct = (pkg_total[p] > 0) ? (pkg_covered[p] / pkg_total[p]) * 100 : 0
+                printf "%06.2f|%s|%d|%d\n", pct, p, pkg_covered[p], pkg_total[p]
               }
             }
-          ' coverage/coverage.out > table.md
+          ' coverage/coverage.out \
+          | sort -t'|' -nr \
+          | awk -F'|' '
+            BEGIN {
+              print "| Package | Coverage |"
+              print "|---------|----------|"
+            }
+            {
+              printf "| ./%s | %5.1f%% |\n", $2, $1
+            }
+          ' > table.md
 
           # Build final comment
           cat > comment.md << EOF
