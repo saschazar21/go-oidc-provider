@@ -1,3 +1,8 @@
+## [0.1.3] - 2026-02-10
+
+### ⚙️ Miscellaneous Tasks
+
+- Improve the matrix compile job for CLI applications (#8)
 ## [0.1.2] - 2026-02-10
 
 ### ⚙️ Miscellaneous Tasks
