@@ -57,10 +57,9 @@ jobs:
           # Using the raw coverage.out (mode: atomic + file:line.col,line.col count hit)
           # Aggregate and sort package coverage automatically
           awk '
-          NR == 1 { next }  # skip "mode: atomic"
+          NR == 1 { next }
 
           {
-            # Split "file:range"
             split($1, a, ":")
             file = a[1]
 
@@ -73,14 +72,14 @@ jobs:
 
           END {
             for (f in total) {
-              # remove module prefix → leaves pkg/path/file.go
-              sub(/^github\.com\/[^\/]+\/[^\/]+\//, "", f)
+              orig = f                                            # save original key
+              sub(/^github\.com\/[^\/]+\/[^\/]+\//, "", f)        # strip module prefix
 
               split(f, p, "/")
               pkg = p[1]
 
-              pkg_total[pkg] += total[f]
-              pkg_covered[pkg] += covered[f]
+              pkg_total[pkg]   += total[orig]                     # use original key
+              pkg_covered[pkg] += covered[orig]                   # use original key
             }
 
             for (pkg in pkg_total) {
