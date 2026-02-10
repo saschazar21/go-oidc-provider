@@ -1,3 +1,8 @@
+## [0.1.1] - 2026-02-10
+
+### ⚙️ Miscellaneous Tasks
+
+- Fixed CLI build input path (#6)
 ## [0.1.0] - 2026-02-10
 
 ### 🚀 Features
