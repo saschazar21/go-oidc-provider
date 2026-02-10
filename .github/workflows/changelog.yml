@@ -34,7 +34,7 @@ jobs:
           if [ ! -f ./cliff.toml ]; then
             curl \
               -fsSL \
-              "https://raw.githubusercontent.com/orhun/git-cliff/refs/tags/v4.4.2/config/cliff.toml" \
+              "https://raw.githubusercontent.com/orhun/git-cliff/refs/tags/v2.12.0/config/cliff.toml" \
               -o ./cliff.toml
           fi
 

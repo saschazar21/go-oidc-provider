@@ -51,12 +51,15 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
+        with:
+          package_json_file: demo/package.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: ".tool-versions"
           cache: "pnpm"
+          cache-dependency-path: demo/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install
