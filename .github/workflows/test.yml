@@ -57,26 +57,19 @@ jobs:
           # We filter out "total:" and format as markdown table
           PACKAGES=$(go tool cover -func=coverage/coverage.out \
             | grep -v '^total:' \
-            | awk '{printf "| %s | %s |\n", $1, $3}' \
-            | sort -k3 -r || echo "| (no packages found) | - |")
+            | sort -k3 -r \
+            | awk '{ sub(/^github\.com\/[^\/]+\/[^\/]+\//, "./", $1); printf "- %s: %s\n", $1, $3 }' \
+            || echo "- (no coverage data)")
 
-          {
-            cat << 'EOF'
+          cat > comment.md << EOF
           ### Code Coverage Report (Package Level)
 
-          **Total coverage**: ${{ TOTAL }}
+          **Total**: $TOTAL
 
-          | Package path                          | Coverage |
-          |---------------------------------------|----------|
+          $PACKAGES
+
+          *via \`go tool cover -func\` — package-level only*
           EOF
-
-            echo "$PACKAGES"
-
-            cat << 'EOF'
-
-          *Sorted by coverage descending. Generated from \`make test\`.*
-          EOF
-          } > comment.md
 
       - name: Post or update comment on PR
         id: comment
