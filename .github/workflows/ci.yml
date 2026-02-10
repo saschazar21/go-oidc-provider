@@ -1,0 +1,38 @@
+name: Unit Tests
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    name: Set up build environment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: |
+            go.sum
+
+      - name: Tidy up
+        run: go mod tidy
+
+      - name: Run unit tests
+        run: make test
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: coverage-files
+          path: |
+            coverage.out
+            coverage.html
+          retention-days: 5 # short-lived is fine for PR comments
+          if-no-files-found: warn

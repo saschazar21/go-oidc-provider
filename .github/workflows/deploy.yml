@@ -1,0 +1,100 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: "Guard"
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - run: echo "Proceeding with deploy"
+
+  outputs:
+    name: "Set outputs"
+    needs: [guard]
+    uses: ./.github/workflows/outputs.yml
+
+  ci:
+    name: "Run unit tests"
+    needs: [guard]
+    uses: ./.github/workflows/ci.yml
+
+  netlify:
+    name: "Deploy to Netlify"
+    runs-on: ubuntu-latest
+    needs:
+      - outputs
+      - ci
+
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.deploy_url }}
+
+    outputs:
+      deploy_id: ${{ steps.deploy.outputs.deploy_id }}
+      deploy_url: ${{ steps.deploy.outputs.deploy_url }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".tool-versions"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: demo
+
+      # NOTE: Go is required by the Netlify build process.
+      # Remove this step if your build does not depend on Go.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: |
+            go.sum
+
+      - name: Deploy to Netlify
+        id: deploy
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          COMMIT_MSG: ${{ needs.outputs.outputs.message }}
+          SHORT_SHA: ${{ needs.outputs.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+
+          deploy_message="${SHORT_SHA} \u2013 ${COMMIT_MSG}"
+
+          pnpm netlify deploy \
+            --build \
+            --prod \
+            --context=production \
+            --message="${deploy_message}" \
+            --telemetry-disable \
+            --json \
+            > netlify.json
+
+          cat netlify.json
+
+          echo "deploy_id=$(jq -re '.deploy_id' netlify.json)" >> $GITHUB_OUTPUT
+          echo "deploy_url=$(jq -re '.deploy_url' netlify.json)" >> $GITHUB_OUTPUT
+        working-directory: demo
