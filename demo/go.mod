@@ -1,6 +1,6 @@
 module github.com/saschazar21/go-oidc-demo
 
-go 1.24.3
+go 1.24.4
 
 replace github.com/saschazar21/go-oidc-provider => ../
 
