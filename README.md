@@ -4,14 +4,20 @@
   <p><strong>A lightweight OpenID Connect (OIDC) & OAuth 2.0 identity provider library in Go.</strong></p>
 
   <p>
-    <a href="https://app.netlify.com/projects/go-oidc-demo/deploys">
-      <img src="https://api.netlify.com/api/v1/badges/b795e10b-a47e-40a1-abd4-c2e7c1894598/deploy-status" alt="Netlify Deploy Status">
+    <a href="https://go-oidc-demo.netlify.app" target="_blank" rel="noopener noreferrer">
+      <img alt="Deployed demo URL" src="https://img.shields.io/badge/demo-go--oidc--demo.netlify.app-white?style=flat-square&logo=netlify&logoColor=00C7B7">
     </a>
-    <a href="https://github.com/saschazar21/go-oidc-provider/actions/workflows/ci.yml">
-      <img src="https://img.shields.io/github/actions/workflow/status/your-username/your-repo/ci.yml?branch=main&style=flat-square&logo=github&logoColor=white" alt="GitHub Actions CI">
+    <a href="https://github.com/saschazar21/go-oidc-provider/releases" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/github/v/release/saschazar21/go-oidc-provider?style=flat-square&logo=github&logoColor=white" alt="GitHub Release">
     </a>
-    <a href="https://pkg.go.dev/github.com/saschazar21/go-oidc-provider">
-      <img src="https://img.shields.io/github/go-mod/go-version/saschazar21/go-oidc-provider?style=flat-square&logo=go&logoColor=00ADD8" alt="Go Version">
+    <a href="https://github.com/saschazar21/go-oidc-provider/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
+      <img alt="GitHub License" src="https://img.shields.io/github/license/saschazar21/go-oidc-provider?style=flat-square">
+    </a>
+    <a href="https://github.com/saschazar21/go-oidc-provider/actions/workflows/release.yml" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/github/actions/workflow/status/saschazar21/go-oidc-provider/release.yml?branch=main&style=flat-square&logo=github&logoColor=white" alt="GitHub Actions CI">
+    </a>
+    <a href="https://pkg.go.dev/github.com/saschazar21/go-oidc-provider" target="_blank" rel="noopener noreferrer">
+      <img src="https://pkg.go.dev/badge/github.com/saschazar21/go-oidc-provider.svg" alt="Go Reference">
     </a>
   </p>
 </div>
