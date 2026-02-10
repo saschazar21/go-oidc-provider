@@ -5,6 +5,7 @@ on:
     inputs:
       args:
         type: string
+        description: "git-cliff CLI flags, e.g. '-v --bump' or '-v --latest --strip all'"
 
     outputs:
       content:
@@ -24,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -33,15 +34,21 @@ jobs:
           if [ ! -f ./cliff.toml ]; then
             curl \
               -fsSL \
-              "https://raw.githubusercontent.com/orhun/git-cliff/refs/heads/main/config/cliff.toml" \
+              "https://raw.githubusercontent.com/orhun/git-cliff/refs/tags/v4.4.2/config/cliff.toml" \
               -o ./cliff.toml
           fi
 
-      - name: Changelog
+      - name: Generate changelog
         id: changelog
-        env:
-          OUTPUT: CHANGELOG.md
         uses: orhun/git-cliff-action@v4
         with:
           config: ./cliff.toml
           args: ${{ inputs.args }}
+
+      - name: Validate outputs
+        run: |
+          if [ -z "$VERSION" ]; then
+            echo "::notice::No version bump detected — this may be expected for --latest runs"
+          fi
+        env:
+          VERSION: ${{ steps.changelog.outputs.version }}
