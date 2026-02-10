@@ -96,15 +96,18 @@ jobs:
           ' coverage/coverage.out > table.md || echo "| (no data) | - |" > table.md
 
           # Build final comment
-          cat > comment.md << 'EOF'
+          cat > comment.md << EOF
           ${{ env.COMMENT_MARKER }} (Package Level)
 
-          **Total**: '"$TOTAL"'
+          **Total**: $TOTAL
 
           $(cat table.md)
 
           *Only main packages shown. Sorted by coverage descending.*
           EOF
+
+          echo "Generated comment body:"
+          cat comment.md
 
       - name: Post or update coverage comment on PR
         if: ${{ github.event_name == 'pull_request' && steps.body.outcome == 'success' }} # safer than steps.body (you used steps.body earlier)
