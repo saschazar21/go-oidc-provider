@@ -5,25 +5,42 @@ on:
     branches:
       - main
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
+  guard:
+    name: "Guard"
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - run: echo "Proceeding with deploy"
+
   outputs:
     name: "Set outputs"
+    needs: [guard]
     uses: ./.github/workflows/outputs.yml
 
   ci:
     name: "Run unit tests"
+    needs: [guard]
     uses: ./.github/workflows/ci.yml
 
   netlify:
     name: "Deploy to Netlify"
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
-    env:
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
     needs:
       - outputs
       - ci
+
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.deploy_url }}
+
     outputs:
       deploy_id: ${{ steps.deploy.outputs.deploy_id }}
       deploy_url: ${{ steps.deploy.outputs.deploy_url }}
@@ -45,42 +62,39 @@ jobs:
         run: pnpm install
         working-directory: demo
 
+      # NOTE: Go is required by the Netlify build process.
+      # Remove this step if your build does not depend on Go.
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           check-latest: true
           cache-dependency-path: |
             go.sum
 
-      - name: Set deploy variables
-        id: var
-        run: |
-          deploy_message="${{ needs.outputs.outputs.short_sha }} – ${{ needs.outputs.outputs.message }}"
-
-          prod_flag="--prod"
-          context_flag="--context=production"
-          alias_flag=""
-
-          echo "deploy_message=$deploy_message" >> $GITHUB_OUTPUT
-          echo "prod_flag=$prod_flag" >> $GITHUB_OUTPUT
-          echo "context_flag=$context_flag" >> $GITHUB_OUTPUT
-          echo "alias_flag=$alias_flag" >> $GITHUB_OUTPUT
-        working-directory: demo
-
       - name: Deploy to Netlify
         id: deploy
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          COMMIT_MSG: ${{ needs.outputs.outputs.message }}
+          SHORT_SHA: ${{ needs.outputs.outputs.short_sha }}
         run: |
+          set -euo pipefail
+
+          deploy_message="${SHORT_SHA} \u2013 ${COMMIT_MSG}"
+
           pnpm netlify deploy \
             --build \
-            ${{ steps.var.outputs.prod_flag }} \
-            ${{ steps.var.outputs.context_flag }} \
-            ${{ steps.var.outputs.alias_flag }} \
-            --message="${{ steps.var.outputs.deploy_message }}" \
+            --prod \
+            --context=production \
+            --message="${deploy_message}" \
             --telemetry-disable \
             --json \
             > netlify.json
 
-          echo "deploy_id=$(jq -r '.deploy_id' netlify.json)" >> $GITHUB_OUTPUT
-          echo "deploy_url=$(jq -r '.deploy_url' netlify.json)" >> $GITHUB_OUTPUT
+          cat netlify.json
+
+          echo "deploy_id=$(jq -re '.deploy_id' netlify.json)" >> $GITHUB_OUTPUT
+          echo "deploy_url=$(jq -re '.deploy_url' netlify.json)" >> $GITHUB_OUTPUT
         working-directory: demo
