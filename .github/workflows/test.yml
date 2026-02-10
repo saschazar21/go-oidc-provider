@@ -44,32 +44,71 @@ jobs:
           go tool cover -func=coverage/coverage.out | tail -n 3 || true
 
       - name: Create coverage comment body
-        id: make-comment
+        id: body
         run: |
-          TOTAL=$(go tool cover -func=coverage/coverage.out | tail -1 | awk '{print $3}' || echo "??.?%")
+          # Get total coverage
+          TOTAL=$(go tool cover -func=coverage/coverage.out | tail -1 | awk '{print $3}' || echo "?.?%")
+
+          # Extract package-level coverage
+          #   -func output has lines like:
+          #   github.com/yourorg/yourrepo/cli    78.5%
+          #   github.com/yourorg/yourrepo/db     92.3%
+          #   ...
+          # We filter out "total:" and format as markdown table
+          PACKAGES=$(go tool cover -func=coverage/coverage.out \
+            | grep -v '^total:' \
+            | awk '{printf "| %s | %s |\n", $1, $3}' \
+            | sort -k3 -r || echo "| (no packages found) | - |")
 
           {
-            echo "### Code Coverage Report"
-            echo ""
-            echo "**Total coverage**: ${TOTAL}"
-            echo ""
-            echo '```text'
-            go tool cover -func=coverage/coverage.out | grep -v '^total:' | sort -k 3 -r | head -n 12 || echo "(no packages found)"
-            echo '```'
-            echo ""
-            echo "<details>"
-            echo "<summary>Full func-level output</summary>"
-            echo '```text'
-            cat coverage/coverage.out || echo "coverage.out not found"
-            echo '```'
-            echo "</details>"
-            echo ""
-            echo "*Generated from \`make test\` — [view HTML locally](./coverage/coverage.html?raw=true)*"
+            cat << 'EOF'
+          ### Code Coverage Report (Package Level)
+
+          **Total coverage**: ${{ TOTAL }}
+
+          | Package path                          | Coverage |
+          |---------------------------------------|----------|
+          EOF
+
+            echo "$PACKAGES"
+
+            cat << 'EOF'
+
+          *Sorted by coverage descending. Generated from \`make test\`.*
+          EOF
           } > comment.md
 
       - name: Post or update comment on PR
-        uses: peter-evans/create-or-update-comment@v4
+        id: comment
+        if: ${{ steps.body.outcome == 'success' }}
+        uses: actions/github-script@v7
         with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body-file: comment.md
-          edit-mode: replace
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf-8');
+
+            // Check if a comment already exists from this action
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const botComment = comments.find((comment) => comment.body.includes('### Code Coverage Report'));
+
+            if (botComment) {
+              // Delete existing comment
+              await github.rest.issues.deleteComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+            }
+
+            // Create new comment
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
