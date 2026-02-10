@@ -1,3 +1,8 @@
+## [0.1.2] - 2026-02-10
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump go version from 1.24.3 to 1.24.4 (#7)
 ## [0.1.1] - 2026-02-10
 
 ### ⚙️ Miscellaneous Tasks
