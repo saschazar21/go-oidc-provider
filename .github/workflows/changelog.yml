@@ -37,11 +37,7 @@ jobs:
               "https://raw.githubusercontent.com/orhun/git-cliff/refs/tags/v2.12.0/config/cliff.toml" \
               -o ./cliff.toml
 
-            cat >> cliff.toml <<'EOF'
-
-              [bump]
-              initial_tag = "v0.1.0"
-            EOF
+            printf '\n[bump]\ninitial_tag = "v0.1.0"\n' >> ./cliff.toml
           fi
 
       - name: Generate changelog
