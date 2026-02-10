@@ -50,29 +50,60 @@ jobs:
       - name: Create coverage comment body
         id: body
         run: |
-          # Get total coverage
+          # Get total coverage (from the last line of -func output)
           TOTAL=$(go tool cover -func=coverage/coverage.out | tail -1 | awk '{print $3}' || echo "?.?%")
 
-          # Extract package-level coverage
-          #   -func output has lines like:
-          #   github.com/yourorg/yourrepo/cli    78.5%
-          #   github.com/yourorg/yourrepo/db     92.3%
-          #   ...
-          # We filter out "total:" and format as markdown table
-          PACKAGES=$(go tool cover -func=coverage/coverage.out \
-            | grep -v '^total:' \
-            | sort -k3 -r \
-            | awk '{ sub(/^github\.com\/[^\/]+\/[^\/]+\//, "./", $1); printf "- %s: %s\n", $1, $3 }' \
-            || echo "- (no coverage data)")
+          # Aggregate coverage per package from coverage.out
+          #   - Skip mode line
+          #   - Extract package/dir from file path (e.g. github.com/org/repo/models/xxx.go → ./models)
+          #   - Sum statements covered / total statements per package
+          awk '
+            BEGIN { total=0; covered=0; }
+            NR==1 { next }  # skip "mode: ..." line
+            {
+              file = $1;
+              stmts = $2;
+              hit   = $3;
+              
+              # Extract package dir (remove full import path prefix and filename)
+              sub(/^.*\/(cli|db|endpoints|errors|helpers|idtoken|models|utils)\//, "./\\1/", file);
+              sub(/\/[^\/]+$/, "", file);  # remove filename
+              
+              if (file ~ /^\.\/(cli|db|endpoints|errors|helpers|idtoken|models|utils)$/) {
+                total[file] += stmts;
+                covered[file] += hit;
+              }
+            }
+            END {
+              printf "| Package | Coverage |\n";
+              printf "|---------|----------|\n";
+              
+              # Sort by coverage descending
+              n = asorti(covered, sorted, "cmp_coverage");
+              for (i=1; i<=n; i++) {
+                pkg = sorted[i];
+                if (total[pkg] > 0) {
+                  pct = (covered[pkg] / total[pkg]) * 100;
+                  printf "| %s | %.1f%% |\n", pkg, pct;
+                } else {
+                  printf "| %s | 0.0%% |\n", pkg;
+                }
+              }
+            }
+            function cmp_coverage(i1, v1, i2, v2) {
+              return (covered[i2]/total[i2]) - (covered[i1]/total[i1]);
+            }
+          ' coverage/coverage.out > table.md || echo "| (no data) | - |" > table.md
 
-          cat > comment.md << EOF
+          # Build final comment
+          cat > comment.md << 'EOF'
           ${{ env.COMMENT_MARKER }} (Package Level)
 
-          **Total**: $TOTAL
+          **Total**: '"$TOTAL"'
 
-          $PACKAGES
+          $(cat table.md)
 
-          *via \`go tool cover -func\` — package-level only*
+          *Only main packages shown. Sorted by coverage descending.*
           EOF
 
       - name: Post or update coverage comment on PR
