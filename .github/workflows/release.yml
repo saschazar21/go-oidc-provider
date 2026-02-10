@@ -19,7 +19,7 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     uses: ./.github/workflows/changelog.yml
     with:
-      args: -v --bump --tag-pattern="v[0-9].*"
+      args: -v --bump --tag-pattern="v[0-9].*" --initial-tag v0.0.0
 
   tag:
     name: Tag
@@ -67,7 +67,7 @@ jobs:
       - tag
     uses: ./.github/workflows/changelog.yml
     with:
-      args: -v --latest --strip all
+      args: -v --latest --strip all --initial-tag v0.0.0
 
   compile:
     name: Build ${{ matrix.os }} / ${{ matrix.arch }}${{ matrix.ver && format('-v{0}', matrix.ver) || '' }}
