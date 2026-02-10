@@ -138,7 +138,7 @@ jobs:
             output_name="$(get_suffix "${cmd}" "${GOOS}" "${GOARCH}" "${GOARM}")"
 
             echo "Building ${cmd} → ${output_name}"
-            go build -trimpath -o "${output_name}" "${binary_dir}/main.go"
+            go build -trimpath -o "${output_name}" "./${binary_dir}"
 
             [ "${GOOS}" != "windows" ] && chmod +x "${output_name}" || true
           done
