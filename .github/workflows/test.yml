@@ -53,24 +53,61 @@ jobs:
           # Get total coverage (from the last line of -func output)
           TOTAL=$(go tool cover -func=coverage/coverage.out | tail -1 | awk '{print $3}' || echo "?.?%")
 
-          go tool cover -func=coverage/coverage.out \
-            | grep -v '^total:' \
-            | awk '
-              $1 ~ /(cli|db|endpoints|errors|helpers|idtoken|models|utils)\// {
-                pkg = $1;
-                sub(/\/.*$/, "", pkg);
-                sub(/^.*\//, "./", pkg);
-                sum[pkg] += $3 + 0;
-                count[pkg]++;
+          # Aggregate statement coverage per top-level package
+          # Using the raw coverage.out (mode: atomic + file:line.col,line.col count hit)
+          awk '
+            BEGIN {
+              pkgs["cli"] = 0; covered["cli"] = 0;
+              pkgs["db"] = 0; covered["db"] = 0;
+              pkgs["endpoints"] = 0; covered["endpoints"] = 0;
+              pkgs["errors"] = 0; covered["errors"] = 0;
+              pkgs["helpers"] = 0; covered["helpers"] = 0;
+              pkgs["idtoken"] = 0; covered["idtoken"] = 0;
+              pkgs["models"] = 0; covered["models"] = 0;
+              pkgs["utils"] = 0; covered["utils"] = 0;
+            }
+            $1 ~ /github\.com\/saschazar21\/go-oidc-provider\// {
+              file = $1;
+              statements = $2 + 0;
+              hits = $3 + 0;
+
+              # Extract package name (directory right after repo name)
+              split(file, parts, "/");
+              pkg = parts[4];  # cli, helpers, models, utils, endpoints, idtoken, db, errors, ...
+
+              if (pkg in pkgs) {
+                pkgs[pkg] += statements;
+                covered[pkg] += hits;
               }
-              END {
-                printf "| Package     | Coverage (avg) |\n|-------------|----------------|\n";
-                for (p in sum) {
-                  printf "| %-11s | %13.1f%% |\n", p, sum[p]/count[p];
+            }
+            END {
+              printf "| Package     | Coverage  |\n";
+              printf "|-------------|-----------|\n";
+
+              n = split("cli db endpoints errors helpers idtoken models utils", pkg_list, " ");
+              # Bubble sort by coverage descending (simple, no external sort needed)
+              for (i=1; i<=n; i++) {
+                for (j=1; j<=n-i; j++) {
+                  p1 = pkg_list[j];   p2 = pkg_list[j+1];
+                  c1 = (pkgs[p1]>0 ? covered[p1]/pkgs[p1] : 0);
+                  c2 = (pkgs[p2]>0 ? covered[p2]/pkgs[p2] : 0);
+                  if (c1 < c2) {
+                    tmp = pkg_list[j]; pkg_list[j] = pkg_list[j+1]; pkg_list[j+1] = tmp;
+                  }
                 }
               }
-            ' \
-            | sort -k3 -r -n > table.md || echo "| (no data) | - |" > table.md
+
+              for (i=1; i<=n; i++) {
+                p = pkg_list[i];
+                if (pkgs[p] > 0) {
+                  pct = (covered[p] / pkgs[p]) * 100;
+                  printf "| %-11s | %6.1f%%  |\n", "./" p, pct;
+                } else {
+                  printf "| %-11s |  0.0%%   |\n", "./" p;
+                }
+              }
+            }
+          ' coverage/coverage.out > table.md || echo "| (processing error) | - |" > table.md
 
           # Build final comment
           cat > comment.md << EOF
