@@ -18,7 +18,7 @@ type Session struct {
 	bun.BaseModel `bun:"table:oidc_sessions"`
 
 	ID         uuid.UUID              `json:"-" schema:"-" bun:"session_id,pk,type:uuid,default:gen_random_uuid()"`
-	IPAddress  *utils.EncryptedString `json:"-" schema:"-" validate:"omitempty,ip_addr" bun:"ip_address,type:bytea"`               // Encrypted IP address of the session
+	IPAddress  *utils.EncryptedString `json:"-" schema:"-" validate:"omitempty,ip|hostname_port" bun:"ip_address,type:bytea"`      // Encrypted IP address of the session
 	UserAgent  *string                `json:"-" schema:"-" bun:"user_agent"`                                                       // User agent string of the session
 	DeviceInfo *string                `json:"-" schema:"-" bun:"device_info"`                                                      // Optional device information for the session
 	Scope      *[]utils.Scope         `json:"-" schema:"-" validate:"omitempty,dive,scope" bun:"scope,type:oidc_standard_scope[]"` // List of scopes associated with the session

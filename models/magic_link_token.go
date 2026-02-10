@@ -22,7 +22,7 @@ type MagicLinkToken struct {
 	ID        uuid.UUID              `json:"-" schema:"-" bun:"token_id,pk,type:uuid,default:gen_random_uuid()"`                 // Unique identifier for the token
 	Token     *utils.HashedString    `json:"-" schema:"token,required" bun:"token,type:bytea,notnull"`                           // Hashed token value
 	Email     *utils.HashedString    `json:"-" schema:"email,required" validate:"required,email" bun:"email,type:bytea,notnull"` // Hashed email address associated with the token
-	IPAddress *utils.EncryptedString `json:"-" schema:"-" validate:"omitempty,ip_addr" bun:"ip_address,type:bytea"`              // Encrypted IP address of the user
+	IPAddress *utils.EncryptedString `json:"-" schema:"-" validate:"omitempty,ip|hostname_port" bun:"ip_address,type:bytea"`     // Encrypted IP address of the user
 	UserAgent *string                `json:"-" schema:"-" bun:"user_agent"`                                                      // User agent string of the user
 
 	IsActive *bool         `json:"-" schema:"-" bun:"is_active,default:true"`             // Whether the token is active
