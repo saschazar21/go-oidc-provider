@@ -105,6 +105,23 @@ jobs:
           cache-dependency-path: |
             **/go.sum
 
+      - name: Discover CLI applications
+        id: discover
+        run: |
+          apps=""
+          for dir in cli/*/; do
+            if [ -d "$dir" ]; then
+              app="$(basename "$dir")"
+              if [ -n "$apps" ]; then
+                apps="${apps} ${app}"
+              else
+                apps="${app}"
+              fi
+            fi
+          done
+          echo "apps=${apps}" >> "$GITHUB_OUTPUT"
+          echo "Discovered CLI applications: ${apps}"
+
       - name: Build all CLI applications
         id: build
         env:
@@ -127,30 +144,29 @@ jobs:
             esac
 
             if [ "$os" = "windows" ]; then
-              echo "${base}${suffix}.exe"
+              echo "${base}_${os}${suffix}.exe"
             else
-              echo "${base}${suffix}"
+              echo "${base}_${os}${suffix}"
             fi
           }
 
-          for cmd in client magic-link-whitelist user; do
+          mkdir -p dist
+
+          for cmd in ${{ steps.discover.outputs.apps }}; do
             binary_dir="cli/${cmd}"
             output_name="$(get_suffix "${cmd}" "${GOOS}" "${GOARCH}" "${GOARM}")"
 
             echo "Building ${cmd} → ${output_name}"
-            go build -trimpath -o "${output_name}" "./${binary_dir}"
+            go build -trimpath -o "dist/${output_name}" "./${binary_dir}"
 
-            [ "${GOOS}" != "windows" ] && chmod +x "${output_name}" || true
+            [ "${GOOS}" != "windows" ] && chmod +x "dist/${output_name}" || true
           done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ver && format('-armv{0}', matrix.ver) || '' }}
-          path: |
-            client*
-            magic-link-whitelist*
-            user*
+          name: binaries_${{ matrix.os }}${{ matrix.ver && format('-armv{0}', matrix.ver) || format('-{0}', matrix.arch) }}
+          path: dist/*
           if-no-files-found: error
           retention-days: 7
           compression-level: 6
@@ -169,7 +185,7 @@ jobs:
       - name: Download all matrix artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: binaries-*
+          pattern: binaries_*
           path: all-binaries/
           merge-multiple: true
 
@@ -187,11 +203,8 @@ jobs:
           body: ${{ needs.changes.outputs.content || 'Automated release' }}
           draft: false
           prerelease: false
-          fail_on_unmatched_files: true
-          files: |
-            all-binaries/client*
-            all-binaries/magic-link-whitelist*
-            all-binaries/user*
+          fail_on_unmatched_files: false
+          files: all-binaries/*
 
   release-go:
     name: Release Go package
@@ -205,6 +218,8 @@ jobs:
     steps:
       - name: Set up Go
         uses: actions/setup-go@v5
+        with:
+          cache: false
 
       - name: Publish to Go module proxy
         env:
