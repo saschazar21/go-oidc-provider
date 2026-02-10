@@ -57,6 +57,7 @@ jobs:
           # Using the raw coverage.out (mode: atomic + file:line.col,line.col count hit)
           awk '
             BEGIN {
+              # Initialize all packages
               pkgs["cli"] = 0; cov["cli"] = 0;
               pkgs["db"] = 0; cov["db"] = 0;
               pkgs["endpoints"] = 0; cov["endpoints"] = 0;
@@ -66,23 +67,28 @@ jobs:
               pkgs["models"] = 0; cov["models"] = 0;
               pkgs["utils"] = 0; cov["utils"] = 0;
             }
-            $1 ~ /^github\.com\/saschazar21\/go-oidc-provider\// && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ {
+
+            # Only process valid coverage lines
+            $1 ~ /^github\.com\/saschazar21\/go-oidc-provider\// && $2 ~ /^[0-9.]+$/ && $3 ~ /^[0-9]+$/ {
               file = $1;
               stmts = $2 + 0;
               hits  = $3 + 0;
 
-              # Extract package name reliably: everything between repo name and next /filename
+              # Extract the package name (the directory right after the repo name)
               match(file, /^github\.com\/saschazar21\/go-oidc-provider\/([^\/]+)/, arr);
-              if (arr[1] != "" && arr[1] in pkgs) {
-                pkgs[arr[1]] += stmts;
-                cov[arr[1]] += hits;
+              pkg = arr[1];
+
+              if (pkg != "" && pkg in pkgs) {
+                pkgs[pkg] += stmts;
+                cov[pkg] += hits;
               }
             }
+
             END {
               print "| Package     | Coverage  |";
               print "|-------------|-----------|";
 
-              # Order we want (highest first based on your example)
+              # Fixed order (highest coverage first based on expected values)
               split("db helpers models idtoken endpoints cli errors utils", order, " ");
 
               for (i=1; i<=length(order); i++) {
