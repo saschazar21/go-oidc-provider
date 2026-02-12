@@ -14,7 +14,7 @@ const (
 	AUTH_METHOD   = "auth-method"
 	AUTH_STATUS   = "auth-status"
 	CLAIM_TYPE    = "claim-type"
-	CONTAINS_ALL  = "contains-all"
+	CONTAINS_ANY  = "contains-any"
 	DATE          = "date"
 	DISPLAY       = "display"
 	GRANT_TYPE    = "grant-type"
@@ -45,7 +45,7 @@ func NewCustomValidator() *validator.Validate {
 		_customValidator.RegisterValidation(AUTH_METHOD, validateAuthMethod)
 		_customValidator.RegisterValidation(AUTH_STATUS, validateAuthStatus)
 		_customValidator.RegisterValidation(CLAIM_TYPE, validateClaimType)
-		_customValidator.RegisterValidation(CONTAINS_ALL, validateContainsAll)
+		_customValidator.RegisterValidation(CONTAINS_ANY, validateContainsAny)
 		_customValidator.RegisterValidation(DATE, validateDate)
 		_customValidator.RegisterValidation(DISPLAY, validateDisplay)
 		_customValidator.RegisterValidation(GRANT_TYPE, validateGrantType)
@@ -178,7 +178,7 @@ func validateClaimType(fl validator.FieldLevel) bool {
 	return false
 }
 
-func validateContainsAll(fl validator.FieldLevel) bool {
+func validateContainsAny(fl validator.FieldLevel) bool {
 	var slice []string
 
 	switch t := fl.Field().Interface().(type) {
@@ -207,17 +207,11 @@ func validateContainsAll(fl validator.FieldLevel) bool {
 
 	for _, item := range slice {
 		if _, exists := requiredItems[item]; exists {
-			requiredItems[item] = true
+			return true
 		}
 	}
 
-	for _, found := range requiredItems {
-		if !found {
-			return false
-		}
-	}
-
-	return true
+	return false
 }
 
 func validateDate(fl validator.FieldLevel) bool {

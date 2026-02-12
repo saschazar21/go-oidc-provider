@@ -20,7 +20,7 @@ type OpenIDConfiguration struct {
 	RegistrationEndpoint                       string                   `json:"registration_endpoint,omitempty" validate:"omitempty,https_url"`
 	EndSessionEndpoint                         string                   `json:"end_session_endpoint,omitempty" validate:"omitempty,https_url"`
 	ScopesSupported                            []utils.Scope            `json:"scopes_supported" validate:"omitempty,dive,scope"`
-	ResponseTypesSupported                     []utils.ResponseType     `json:"response_types_supported" validate:"required,contains-all=code&id_token&id_token token,dive,response-type"`
+	ResponseTypesSupported                     []utils.ResponseType     `json:"response_types_supported" validate:"contains-any=code,required,dive,response-type"`
 	ResponseModesSupported                     []utils.ResponseMode     `json:"response_modes_supported" validate:"omitempty,dive,response-mode"`
 	GrantTypesSupported                        []utils.GrantType        `json:"grant_types_supported" validate:"omitempty,dive,grant-type"`
 	ACRValuesSupported                         []utils.ACR              `json:"acr_values_supported" validate:"omitempty,dive,acr"`
