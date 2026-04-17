@@ -1,3 +1,12 @@
+## [0.1.4] - 2026-02-12
+
+### 🐛 Bug Fixes
+
+- Fixed OpenID Configuration validator (#9)
+
+### ⚙️ Miscellaneous Tasks
+
+- Updated README.md [skip ci]
 ## [0.1.3] - 2026-02-10
 
 ### ⚙️ Miscellaneous Tasks
