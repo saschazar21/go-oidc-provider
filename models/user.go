@@ -160,7 +160,9 @@ func (u *User) formatName() {
 		name += fmt.Sprintf(" %s", string(*u.FamilyName))
 	}
 
-	u.Name = &name
+	if name != "" {
+		u.Name = &name
+	}
 }
 
 func (u *User) AfterScanRow(ctx context.Context) error {

@@ -20,8 +20,8 @@ type tokenRequest struct {
 	Code         *string           `json:"code" schema:"code" validate:"required_if=GrantType authorization_code"`
 	RedirectURI  *string           `json:"redirect_uri" schema:"redirect_uri" validate:"required_if=GrantType authorization_code"`
 	ClientID     string            `json:"client_id" schema:"client_id" validate:"required"`
-	ClientSecret *string           `json:"client_secret" schema:"client_secret" validate:"required_without=CodeVerifier"`
-	CodeVerifier *string           `json:"code_verifier" schema:"code_verifier" validate:"required_without=ClientSecret"`
+	ClientSecret *string           `json:"client_secret" schema:"client_secret"`
+	CodeVerifier *string           `json:"code_verifier" schema:"code_verifier"`
 	RefreshToken *string           `json:"refresh_token" schema:"refresh_token" validate:"required_if=GrantType refresh_token"`
 	Scope        *utils.ScopeSlice `json:"scope" schema:"scope" validate:"omitempty,dive,scope"`
 }
@@ -100,6 +100,16 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 		log.Printf("Validation error: %v", err)
 		msg := "Request contained invalid parameters."
 
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusBadRequest,
+			ErrorCode:   errors.INVALID_REQUEST,
+			Description: &msg,
+		}
+	}
+
+	if (tr.ClientSecret == nil || *tr.ClientSecret == "") && (tr.CodeVerifier == nil || *tr.CodeVerifier == "") {
+		msg := "Client authentication failed: missing client_secret or code_verifier."
+		log.Printf("%s", msg)
 		return nil, errors.JSONError{
 			StatusCode:  http.StatusBadRequest,
 			ErrorCode:   errors.INVALID_REQUEST,
@@ -271,6 +281,25 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 		}
 	}
 
+	isConfidential, _ := db.NewSelect().
+		Model((*models.Client)(nil)).
+		Where("client_id = ?", tr.ClientID).
+		Where("is_confidential = ?", true).
+		Exists(ctx)
+
+	if isConfidential && (tr.ClientSecret == nil || *tr.ClientSecret == "") {
+		msg := "Client authentication failed: missing client_secret for confidential client."
+		log.Printf("%s", msg)
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusUnauthorized,
+			ErrorCode:   errors.UNAUTHORIZED,
+			Description: &msg,
+			Headers: map[string]string{
+				"WWW-Authenticate": `Basic realm="token", charset="UTF-8"`,
+			},
+		}
+	}
+
 	var currentToken models.Token
 	var query *bun.SelectQuery
 	query = models.NewTokenQuery(db, *tr.RefreshToken, string(utils.REFRESH_TOKEN_TYPE)).
@@ -279,11 +308,6 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 	if tr.ClientSecret != nil && *tr.ClientSecret != "" {
 		query = query.
 			Where("\"authorization__client\".\"client_secret\" = ?", utils.HashedString(*tr.ClientSecret))
-	}
-
-	if tr.CodeVerifier != nil && *tr.CodeVerifier != "" {
-		query = query.
-			Where("\"authorization\".\"code_challenge\" = ?", utils.GeneratePKCEChallenge(*tr.CodeVerifier))
 	}
 
 	err := query.
