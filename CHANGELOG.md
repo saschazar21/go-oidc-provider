@@ -1,3 +1,8 @@
+## [0.1.5] - 2026-04-17
+
+### 🐛 Bug Fixes
+
+- Removed necessity of providing code_verifier at token rotation (#10)
 ## [0.1.4] - 2026-02-12
 
 ### 🐛 Bug Fixes
