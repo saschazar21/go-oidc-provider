@@ -1,6 +1,7 @@
 package endpoints
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -20,15 +21,13 @@ func HandleToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", fmt.Sprintf("%s, %s", http.MethodPost, http.MethodOptions))
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Accept, Accept-Language, Cache-Control, Content-Type")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		fallthrough
-	case http.MethodHead:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Allow", fmt.Sprintf("%s, %s", http.MethodPost, http.MethodOptions))
+
+		w.WriteHeader(http.StatusNoContent)
 	case http.MethodPost:
 		// Handle POST request here
 		handleToken(w, r)
@@ -77,7 +76,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenMap, err := tr.HandleRequest(ctx, conn)
+	tokenMap, err := tr.HandleRequest(ctx, tx)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("Failed to rollback transaction: %v", rbErr)
@@ -108,5 +107,13 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := helpers.NewTokenResponse(tokens...)
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Expose-Headers", "Cache-Control")
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+
 	resp.Write(w)
 }
