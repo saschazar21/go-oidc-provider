@@ -1,3 +1,8 @@
+## [0.1.6] - 2026-04-30
+
+### 🐛 Bug Fixes
+
+- Fixed none check in openid-configuration (#11)
 ## [0.1.5] - 2026-04-17
 
 ### 🐛 Bug Fixes
