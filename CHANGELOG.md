@@ -1,3 +1,8 @@
+## [0.1.7] - 2026-04-30
+
+### 🐛 Bug Fixes
+
+- Fixed CORS headers in endpoints (#12)
 ## [0.1.6] - 2026-04-30
 
 ### 🐛 Bug Fixes
