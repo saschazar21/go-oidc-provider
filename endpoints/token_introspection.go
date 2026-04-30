@@ -2,8 +2,10 @@ package endpoints
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -12,24 +14,6 @@ import (
 
 func HandleTokenIntrospection(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case http.MethodOptions:
-		origin, err := parseOrigin(r)
-		if err != nil {
-			err.Write(w)
-			return
-		}
-
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		fallthrough
-	case http.MethodHead:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Pragma", "no-cache")
-		w.WriteHeader(http.StatusNoContent)
-		return
 	case http.MethodPost:
 		handleTokenIntrospection(w, r)
 	default:
@@ -40,7 +24,7 @@ func HandleTokenIntrospection(w http.ResponseWriter, r *http.Request) {
 			ErrorCode:   errors.INVALID_REQUEST,
 			Description: &msg,
 			Headers: map[string]string{
-				"Allow": "POST, OPTIONS",
+				"Allow": fmt.Sprintf("%s", http.MethodPost),
 			},
 		}
 
@@ -86,10 +70,17 @@ func handleTokenIntrospection(w http.ResponseWriter, r *http.Request) {
 		oidcErr.Write(w)
 		return
 	}
-
-	if err := json.NewEncoder(w).Encode(res); err != nil {
-		log.Printf("Failed to write token introspection response: %v", err)
+	buf, jsonErr := json.Marshal(res)
+	if jsonErr != nil {
+		log.Printf("Failed to encode token introspection response: %v", jsonErr)
 		oidcErr.Write(w)
 		return
 	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+
+	w.Write(buf)
 }

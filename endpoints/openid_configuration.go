@@ -2,6 +2,7 @@ package endpoints
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -16,21 +17,13 @@ func HandleOpenIDConfiguration(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodOptions:
-		origin, err := parseOrigin(r)
-		if err != nil {
-			err.Write(w)
-			return
-		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions))
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Cache-Control, Content-Type")
+		w.Header().Set("Allow", fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions))
 
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		fallthrough
+		w.WriteHeader(http.StatusNoContent)
 	case http.MethodHead:
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Pragma", "no-cache")
-		w.Header().Set("Allow", "GET, OPTIONS")
 		w.WriteHeader(http.StatusNoContent)
 		return
 	case http.MethodGet:
@@ -43,7 +36,7 @@ func HandleOpenIDConfiguration(w http.ResponseWriter, r *http.Request) {
 			ErrorCode:   errors.INVALID_REQUEST,
 			Description: &msg,
 			Headers: map[string]string{
-				"Allow": "GET, OPTIONS",
+				"Allow": fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions),
 			},
 		}
 
@@ -71,6 +64,10 @@ func handleOpenIDConfiguration(w http.ResponseWriter, _ *http.Request) {
 		err.Write(w)
 		return
 	}
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions))
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Cache-Control, Content-Type")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

@@ -1,8 +1,11 @@
 package endpoints
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -20,16 +23,12 @@ func HandleUserinfo(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization")
-		fallthrough
-	case http.MethodHead:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Access-Control-Allow-Methods", fmt.Sprintf("%s, %s, %s, %s", http.MethodGet, http.MethodHead, http.MethodPost, http.MethodOptions))
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Accept, Accept-Language, Cache-Control, Content-Type")
+		w.Header().Set("Allow", fmt.Sprintf("%s, %s, %s, %s", http.MethodGet, http.MethodHead, http.MethodPost, http.MethodOptions))
+
 		w.WriteHeader(http.StatusNoContent)
-		return
-	case http.MethodGet, http.MethodPost:
+	case http.MethodHead, http.MethodGet, http.MethodPost:
 		handleUserinfo(w, r)
 	default:
 		msg := "Unsupported request method. Only GET and POST are allowed."
@@ -38,7 +37,7 @@ func HandleUserinfo(w http.ResponseWriter, r *http.Request) {
 			ErrorCode:   errors.INVALID_REQUEST,
 			Description: &msg,
 			Headers: map[string]string{
-				"Allow": "GET, POST, OPTIONS",
+				"Allow": fmt.Sprintf("%s, %s, %s, %s", http.MethodGet, http.MethodHead, http.MethodPost, http.MethodOptions),
 			},
 		}
 		err.Write(w)
@@ -80,5 +79,28 @@ func handleUserinfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user.Write(w)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Expose-Headers", "Cache-Control")
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+
+	buf, httpErr := json.Marshal(user)
+	if httpErr != nil {
+		msg := "Error encoding userinfo response to JSON"
+		log.Printf("%s: %v", msg, httpErr)
+		oidcErr.Write(w)
+		return
+	}
+
+	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	w.WriteHeader(http.StatusOK)
+
+	if r.Method == http.MethodHead {
+		return
+	}
+
+	w.Write(buf)
 }

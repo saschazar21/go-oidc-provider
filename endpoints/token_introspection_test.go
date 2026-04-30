@@ -152,20 +152,6 @@ func TestHandleTokenIntrospection(t *testing.T) {
 			wantActive: false,
 			wantStatus: 405,
 		},
-		{
-			name: "Preflight CORS request using OPTIONS method",
-			preHook: func(ctx context.Context, conn bun.IDB) (tokenString string) {
-				return ""
-			},
-			generateRequest: func(tokenString string, serverURL string) *http.Request {
-				req, _ := http.NewRequest("OPTIONS", serverURL+helpers.TOKEN_INTROSPECTION_ENDPOINT, nil)
-				req.Header.Set("Origin", "https://example.com")
-				req.Header.Set("Access-Control-Request-Method", "POST")
-				return req
-			},
-			wantActive: false,
-			wantStatus: 204,
-		},
 	}
 
 	for _, tt := range tests {

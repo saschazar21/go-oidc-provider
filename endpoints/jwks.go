@@ -2,8 +2,10 @@ package endpoints
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -15,24 +17,13 @@ func HandleJWKS(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodOptions:
-		origin, err := parseOrigin(r)
-		if err != nil {
-			err.Write(w)
-			return
-		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions))
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Cache-Control, Content-Type")
+		w.Header().Set("Allow", fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions))
 
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		fallthrough
-	case http.MethodHead:
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Pragma", "no-cache")
-		w.Header().Set("Allow", "GET, OPTIONS")
 		w.WriteHeader(http.StatusNoContent)
-		return
-	case http.MethodGet:
+	case http.MethodHead, http.MethodGet:
 		handleJWKS(w, r)
 	default:
 		msg := "Unsupported request method. Only GET is allowed."
@@ -42,7 +33,7 @@ func HandleJWKS(w http.ResponseWriter, r *http.Request) {
 			ErrorCode:   errors.INVALID_REQUEST,
 			Description: &msg,
 			Headers: map[string]string{
-				"Allow": "GET, OPTIONS",
+				"Allow": fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions),
 			},
 		}
 
@@ -50,7 +41,7 @@ func HandleJWKS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleJWKS(w http.ResponseWriter, _ *http.Request) {
+func handleJWKS(w http.ResponseWriter, r *http.Request) {
 	keys, err := idtoken.LoadKeys()
 	if err != nil {
 		msg := "Failed to load JWKs"
@@ -97,12 +88,17 @@ func handleJWKS(w http.ResponseWriter, _ *http.Request) {
 		Keys: jwks,
 	}
 
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", fmt.Sprintf("%s, %s, %s", http.MethodGet, http.MethodHead, http.MethodOptions))
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Cache-Control, Content-Type")
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		msg := "Failed to encode JWKS response to JSON"
+	buf, err := json.Marshal(resp)
+	if err != nil {
+		msg := "Failed to marshal JWKS response to JSON"
 		log.Printf("%s: %v", msg, err)
 
 		err := errors.JSONError{
@@ -114,4 +110,12 @@ func handleJWKS(w http.ResponseWriter, _ *http.Request) {
 		err.Write(w)
 		return
 	}
+
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	w.Write(buf)
 }
