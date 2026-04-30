@@ -11,12 +11,24 @@ import (
 	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
-func populateSigningAlgs(existing *[]utils.SigningAlgorithm, available []utils.SigningAlgorithm) error {
-	if len(*existing) > 0 && !utils.ContainsValue(*existing, "none") {
-		return fmt.Errorf("pre-existing signing algorithms must not contain any values other than \"none\"")
+func populateSigningAlgs(existing *[]utils.SigningAlgorithm, available []utils.SigningAlgorithm, allowNone bool) error {
+	if len(*existing) > 0 {
+		for _, alg := range *existing {
+			if alg == "none" && allowNone {
+				continue
+			}
+
+			if !utils.ContainsValue(available, alg) {
+				return fmt.Errorf("unsupported signing algorithm: %s", alg)
+			}
+		}
 	}
 
-	*existing = append(*existing, available...)
+	for _, alg := range available {
+		if !utils.ContainsValue(*existing, alg) {
+			*existing = append(*existing, alg)
+		}
+	}
 
 	return nil
 }
@@ -55,17 +67,22 @@ func NewOpenIDConfiguration(customConfig ...*models.OpenIDConfiguration) (*model
 
 	algs := reduceSigningAlgs(&keys)
 
-	signingAlgSlices := []*[]utils.SigningAlgorithm{
-		&config.IDTokenSigningAlgValuesSupported,
-		&config.UserInfoSigningAlgValuesSupported,
-		&config.RequestObjectSigningAlgValuesSupported,
-		&config.TokenEndpointAuthSigningAlgValuesSupported,
+	type signingAlgEntry struct {
+		allowNone bool
+		slice     *[]utils.SigningAlgorithm
 	}
 
-	for _, slice := range signingAlgSlices {
-		if err := populateSigningAlgs(slice, algs); err != nil {
+	signingAlgSlices := []signingAlgEntry{
+		{allowNone: true, slice: &config.IDTokenSigningAlgValuesSupported},
+		{allowNone: true, slice: &config.UserInfoSigningAlgValuesSupported},
+		{allowNone: true, slice: &config.RequestObjectSigningAlgValuesSupported},
+		{allowNone: false, slice: &config.TokenEndpointAuthSigningAlgValuesSupported},
+	}
+
+	for _, entry := range signingAlgSlices {
+		if err := populateSigningAlgs(entry.slice, algs, entry.allowNone); err != nil {
 			msg := "Failed to populate signing algorithms"
-			log.Printf("%s: %v", msg, err)
+			log.Printf("%s: %v (config: %v, available: %v)", msg, err, *entry.slice, algs)
 
 			return nil, errors.JSONError{
 				StatusCode:  http.StatusInternalServerError,
