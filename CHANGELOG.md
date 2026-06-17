@@ -1,3 +1,8 @@
+## [0.1.8] - 2026-06-17
+
+### 🐛 Bug Fixes
+
+- *(models)* Fixed Client default values & validation (#13)
 ## [0.1.7] - 2026-04-30
 
 ### 🐛 Bug Fixes
