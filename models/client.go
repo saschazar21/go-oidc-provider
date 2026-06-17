@@ -24,14 +24,14 @@ type Client struct {
 	bun.BaseModel `bun:"table:oidc_clients"`
 
 	ID            string                `json:"client_id,omitempty" bun:"client_id,pk"`
-	Name          string                `json:"client_name" validate:"required" bun:"client_name,notnull"`                                                                    // Name of the client, used for display purposes
-	Secret        *utils.HashedString   `json:"-" bun:"client_secret,type:bytea"`                                                                                             // Hashed
-	Description   *string               `json:"client_description,omitempty" bun:"client_description,type:text"`                                                              // Optional description of the client
-	URI           *string               `json:"client_uri,omitempty" validate:"omitempty,uri" bun:"client_uri"`                                                               // Optional URI for the client
-	Logo          *string               `json:"logo_uri,omitempty" validate:"omitempty,uri" bun:"logo_uri"`                                                                   // Optional logo URI for the client
-	GrantTypes    *[]utils.GrantType    `json:"grant_types,omitempty" validate:"omitempty,dive,grant-type" bun:"grant_types,type:oidc_grant_type[],notnull"`                  // List of grant types supported by the client
-	ResponseTypes *[]utils.ResponseType `json:"response_types,omitempty" validate:"omitempty,dive,response-type" bun:"response_types,type:oidc_response_type[],notnull"`      // List of response types supported by the client
-	AuthMethod    *utils.AuthMethod     `json:"token_endpoint_auth_method,omitempty" validate:"omitempty,auth-method" bun:"token_endpoint_auth_method,type:oidc_auth_method"` // Authentication method for the token endpoint
+	Name          string                `json:"client_name" validate:"required" bun:"client_name,notnull"`                                                                                                                    // Name of the client, used for display purposes
+	Secret        *utils.HashedString   `json:"-" bun:"client_secret,type:bytea"`                                                                                                                                             // Hashed
+	Description   *string               `json:"client_description,omitempty" bun:"client_description,type:text"`                                                                                                              // Optional description of the client
+	URI           *string               `json:"client_uri,omitempty" validate:"omitempty,uri" bun:"client_uri"`                                                                                                               // Optional URI for the client
+	Logo          *string               `json:"logo_uri,omitempty" validate:"omitempty,uri" bun:"logo_uri"`                                                                                                                   // Optional logo URI for the client
+	GrantTypes    *[]utils.GrantType    `json:"grant_types,omitempty" validate:"omitempty,dive,grant-type" bun:"grant_types,type:oidc_grant_type[],notnull,default:ARRAY['authorization_code'::oidc_grant_type]"`             // List of grant types supported by the client
+	ResponseTypes *[]utils.ResponseType `json:"response_types,omitempty" validate:"omitempty,dive,response-type" bun:"response_types,type:oidc_response_type[],notnull,default:ARRAY['code'::oidc_response_type]"`            // List of response types supported by the client
+	AuthMethod    *utils.AuthMethod     `json:"token_endpoint_auth_method,omitempty" validate:"omitempty,auth-method" bun:"token_endpoint_auth_method,type:oidc_auth_method,default:'client_secret_basic'::oidc_auth_method"` // Authentication method for the token endpoint
 
 	RedirectURIs           []string `json:"redirect_uris" validate:"required,dive,uri" bun:"redirect_uris,type:text[]"`                                    // List of redirect URIs for the client
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris,omitempty" validate:"omitempty,dive,uri" bun:"post_logout_redirect_uris,type:text[]"` // List of post logout redirect URIs for the client

@@ -159,8 +159,8 @@ func (c *Client) Validate() errors.OIDCError {
 	}
 
 	if c.GrantTypes != nil {
-		if (utils.ContainsValue(*c.GrantTypes, utils.CLIENT_CREDENTIALS) || utils.ContainsValue(*c.GrantTypes, utils.REFRESH_TOKEN)) && (c.IsConfidential == nil || !*c.IsConfidential) {
-			description := "public clients cannot use client_credentials or refresh_token grant type"
+		if (utils.ContainsValue(*c.GrantTypes, utils.CLIENT_CREDENTIALS)) && (c.IsConfidential == nil || !*c.IsConfidential) {
+			description := "public clients cannot use client_credentials grant type"
 			log.Println(description)
 			return errors.OIDCErrorResponse{
 				ErrorCode:        errors.INVALID_REQUEST,
@@ -178,39 +178,29 @@ func (c *Client) Validate() errors.OIDCError {
 		}
 
 		if c.ResponseTypes != nil {
-			if utils.ContainsValue(*c.ResponseTypes, utils.TOKEN) && !utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) {
-				description := "response_type 'token' requires 'implicit' grant type"
-				log.Println(description)
-				return errors.OIDCErrorResponse{
-					ErrorCode:        errors.INVALID_REQUEST,
-					ErrorDescription: &description,
-				}
-			}
+			grantTypes := *c.GrantTypes
+			responseTypes := *c.ResponseTypes
 
-			if utils.ContainsValue(*c.ResponseTypes, utils.CODE_TOKEN) && !(utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) && utils.ContainsValue(*c.GrantTypes, utils.AUTHORIZATION_CODE)) {
-				description := "response_type 'code token' requires 'implicit' and 'authorization_code' grant types"
-				log.Println(description)
-				return errors.OIDCErrorResponse{
-					ErrorCode:        errors.INVALID_REQUEST,
-					ErrorDescription: &description,
-				}
-			}
-
-			if utils.ContainsValue(*c.ResponseTypes, utils.CODE_ID_TOKEN) && !(utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) && utils.ContainsValue(*c.GrantTypes, utils.AUTHORIZATION_CODE)) {
-				description := "response_type 'code id_token' requires 'implicit' and 'authorization_code' grant types"
-				log.Println(description)
-				return errors.OIDCErrorResponse{
-					ErrorCode:        errors.INVALID_REQUEST,
-					ErrorDescription: &description,
-				}
-			}
-
-			if utils.ContainsValue(*c.ResponseTypes, utils.CODE_ID_TOKEN_TOKEN) && !(utils.ContainsValue(*c.GrantTypes, utils.IMPLICIT) && utils.ContainsValue(*c.GrantTypes, utils.AUTHORIZATION_CODE)) {
-				description := "response_type 'code id_token token' requires 'implicit' and 'authorization_code' grant types"
-				log.Println(description)
-				return errors.OIDCErrorResponse{
-					ErrorCode:        errors.INVALID_REQUEST,
-					ErrorDescription: &description,
+			for _, responseType := range responseTypes {
+				switch responseType {
+				case utils.TOKEN:
+					if !utils.ContainsValue(grantTypes, utils.IMPLICIT) {
+						description := "response_type 'token' requires 'implicit' grant type"
+						log.Println(description)
+						return errors.OIDCErrorResponse{
+							ErrorCode:        errors.INVALID_REQUEST,
+							ErrorDescription: &description,
+						}
+					}
+				case utils.CODE_TOKEN, utils.CODE_ID_TOKEN, utils.CODE_ID_TOKEN_TOKEN:
+					if !utils.ContainsValue(grantTypes, utils.AUTHORIZATION_CODE) {
+						description := fmt.Sprintf("response_type '%s' requires 'authorization_code' grant type", responseType)
+						log.Println(description)
+						return errors.OIDCErrorResponse{
+							ErrorCode:        errors.INVALID_REQUEST,
+							ErrorDescription: &description,
+						}
+					}
 				}
 			}
 		}
