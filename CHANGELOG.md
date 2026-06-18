@@ -1,3 +1,8 @@
+## [0.1.9] - 2026-06-18
+
+### 🐛 Bug Fixes
+
+- *(helpers)* Fixed session issues (#14)
 ## [0.1.8] - 2026-06-17
 
 ### 🐛 Bug Fixes
