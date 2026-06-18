@@ -62,7 +62,6 @@ func parseCookieFromRequest(r *http.Request, cookieName string) (cookie *session
 	cookie, err = cookieStore.Get(r, cookieName)
 	if err != nil {
 		log.Printf("Error parsing %s cookie: %v", cookieName, err)
-		err = fmt.Errorf("error parsing %s cookie", cookieName)
 	}
 
 	return cookie, err

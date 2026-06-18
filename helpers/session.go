@@ -7,11 +7,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
 	"github.com/uptrace/bun"
 )
+
+func deleteCookie(w http.ResponseWriter, cookieName string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:   cookieName,
+		MaxAge: -1, // Delete cookie
+		Value:  "",
+		Path:   "/",
+	})
+}
 
 func getSessionIdFromCookie(w http.ResponseWriter, r *http.Request) (string, errors.HTTPError) {
 	var statusCode int
@@ -34,10 +44,7 @@ func getSessionIdFromCookie(w http.ResponseWriter, r *http.Request) (string, err
 			log.Printf("No session cookie found, redirecting to login...")
 		}
 
-		session.Options.MaxAge = -1 // Delete cookie
-		if err := session.Save(r, w); err != nil {
-			log.Printf("Error deleting invalid session cookie: %v", err)
-		}
+		deleteCookie(w, SESSION_COOKIE_NAME)
 
 		return "", errors.InternalRedirectError{
 			StatusCode: statusCode,
@@ -46,13 +53,10 @@ func getSessionIdFromCookie(w http.ResponseWriter, r *http.Request) (string, err
 	}
 
 	sessionId, ok := id.(string)
-	if !ok {
+	if !ok || sessionId == "" {
 		log.Printf("Failed to parse session ID to string, redirecting to login...")
 
-		session.Options.MaxAge = -1 // Delete cookie
-		if err := session.Save(r, w); err != nil {
-			log.Printf("Error deleting invalid session cookie: %v", err)
-		}
+		deleteCookie(w, SESSION_COOKIE_NAME)
 
 		return "", errors.InternalRedirectError{
 			StatusCode: statusCode,
@@ -77,12 +81,7 @@ func ParseSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *htt
 	if err != nil {
 		log.Printf("Error retrieving session by ID %s: %v", id, err)
 
-		cookie := http.Cookie{
-			Name:   SESSION_COOKIE_NAME,
-			MaxAge: -1, // Delete cookie
-		}
-
-		http.SetCookie(w, &cookie)
+		deleteCookie(w, SESSION_COOKIE_NAME)
 
 		return nil, errors.InternalRedirectError{
 			StatusCode: http.StatusFound,
@@ -116,11 +115,13 @@ func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http
 	}
 
 	cookieSession.Values[SESSION_COOKIE_ID] = session.ID.String()
-	cookieSession.Options.HttpOnly = true
-	cookieSession.Options.SameSite = http.SameSiteStrictMode
-	cookieSession.Options.Secure = true
-	cookieSession.Options.Path = "/"
-	cookieSession.Options.MaxAge = int(session.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds())
+	cookieSession.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   int(session.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   true,
+	}
 
 	if err := cookieSession.Save(r, w); err != nil {
 		log.Printf("Error saving session cookie: %v", err)
