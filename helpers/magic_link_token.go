@@ -255,7 +255,7 @@ func CreateMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWriter
 	magicLinkSession.Values[MAGIC_LINK_EMAIL] = req.Email
 
 	magicLinkSession.Options = &sessions.Options{
-		Path:     CONSUME_MAGIC_LINK_ENDPOINT,
+		Path:     "/",
 		MaxAge:   int(expirationTime.Sub(time.Now().UTC()).Seconds()), // Set appropriate expiration time
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
