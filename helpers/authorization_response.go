@@ -188,15 +188,7 @@ func (ar *authorizationResponse) populateResponse(ctx context.Context, db bun.ID
 }
 
 func (ar *authorizationResponse) Write(w http.ResponseWriter) {
-	cookie := http.Cookie{
-		Name:     AUTHORIZATION_COOKIE_NAME,
-		Value:    "",
-		MaxAge:   -1, // Delete cookie
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-	}
-	http.SetCookie(w, &cookie)
+	deleteCookie(w, AUTHORIZATION_COOKIE_NAME)
 
 	if err := ar.Validate(); err != nil {
 		msg := "Invalid authorization response"

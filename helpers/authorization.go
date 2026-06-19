@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
@@ -391,11 +392,17 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 
 	cookieStore, _ := utils.NewCookieStore().Get(r, AUTHORIZATION_COOKIE_NAME)
 	cookieStore.Values[AUTHORIZATION_COOKIE_ID] = auth.ID.String()
-	cookieStore.Options.HttpOnly = true
-	cookieStore.Options.MaxAge = int(auth.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds())
-	cookieStore.Options.Path = "/"
-	cookieStore.Options.SameSite = http.SameSiteLaxMode
-	cookieStore.Options.Secure = true
+	cookieStore.Options = &sessions.Options{
+		HttpOnly: true,
+		MaxAge:   int(auth.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds()),
+		Path:     "/",
+		SameSite: http.SameSiteStrictMode,
+		Secure:   true,
+	}
+
+	if auth.State != nil && *auth.State != "" {
+		cookieStore.Values[AUTHORIZATION_COOKIE_STATE] = *auth.State
+	}
 
 	if err := cookieStore.Save(r, w); err != nil {
 		log.Printf("Error saving authorization cookie: %v", err)
