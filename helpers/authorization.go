@@ -396,7 +396,7 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 		HttpOnly: true,
 		MaxAge:   int(auth.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds()),
 		Path:     "/",
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Secure:   true,
 	}
 
