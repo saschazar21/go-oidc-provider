@@ -1,3 +1,8 @@
+## [0.1.11] - 2026-06-19
+
+### 🐛 Bug Fixes
+
+- *(helpers)* Fixed magic link & authorization cookie (#16)
 ## [0.1.10] - 2026-06-19
 
 ### 🐛 Bug Fixes
