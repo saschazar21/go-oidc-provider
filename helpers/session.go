@@ -119,7 +119,7 @@ func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http
 		Path:     "/",
 		MaxAge:   int(session.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds()),
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Secure:   true,
 	}
 

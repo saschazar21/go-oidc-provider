@@ -6,8 +6,10 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
 	"github.com/saschazar21/go-oidc-provider/errors"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
@@ -230,6 +232,7 @@ func CreateMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWriter
 
 	var magicLink *models.MagicLinkToken
 	var uid string
+	var expirationTime time.Time
 
 	if validateEmail(ctx, db, req.Email) {
 		log.Printf("Attempting to create magic link token for e-mail address %s (IP: %s, User-Agent: %s)", req.Email, ipAddress, userAgent)
@@ -240,14 +243,25 @@ func CreateMagicLinkToken(ctx context.Context, db bun.IDB, w http.ResponseWriter
 		}
 
 		uid = magicLink.ID.String()
+		expirationTime = magicLink.ExpiresAt.ExpiresAt
 	} else {
 		log.Printf("E-mail address %s not found or not whitelisted", req.Email)
-		uid = uuid.New().String() // Generate random UUID to avoid user enumeration
+		uid = uuid.New().String()                        // Generate random UUID to avoid user enumeration
+		expirationTime = time.Now().Add(time.Minute * 5) // Set appropriate expiration time for invalid email
 	}
 
 	magicLinkSession, _ := utils.NewCookieStore().Get(r, MAGIC_LINK_COOKIE_NAME)
 	magicLinkSession.Values[MAGIC_LINK_ID] = uid
 	magicLinkSession.Values[MAGIC_LINK_EMAIL] = req.Email
+
+	magicLinkSession.Options = &sessions.Options{
+		Path:     CONSUME_MAGIC_LINK_ENDPOINT,
+		MaxAge:   int(expirationTime.Sub(time.Now().UTC()).Seconds()), // Set appropriate expiration time
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   true,
+	}
+
 	if err := magicLinkSession.Save(r, w); err != nil {
 		log.Printf("Error saving magic link session cookie: %v", err)
 		msg := "Failed to save magic link session."
