@@ -111,6 +111,7 @@ func TestClient(t *testing.T) {
 				assert.Equal(t, client.RedirectURIs, retrievedClient.RedirectURIs, "Redirect URIs should match")
 
 				if client.IsConfidential != nil && (*client.IsConfidential) {
+					previousSecret := string(*client.Secret)
 					newSecret, err := retrievedClient.NewSecret(ctx, db, time.Now().UTC().Add(24*time.Hour))
 
 					if err != nil {
@@ -122,6 +123,24 @@ func TestClient(t *testing.T) {
 					assert.NotEmpty(t, newSecret, "Newly generated client secret should not be empty")
 					assert.Equal(t, *retrievedClient.Secret, utils.HashedString(newSecret), "Hashed secret should match the new secret")
 					assert.NotNil(t, retrievedClient.ClientSecretExpiresAt, "Client secret expiration should be set")
+					assert.Error(t, func() error {
+						_, err := GetClientByIDAndSecret(ctx, db, client.ID, previousSecret)
+						return err
+					}(), "Previous client secret should no longer authenticate after rotation")
+					assert.NoError(t, func() error {
+						_, err := GetClientByIDAndSecret(ctx, db, client.ID, newSecret)
+						return err
+					}(), "Rotated client secret should authenticate")
+
+					isConfidential := false
+					retrievedClient.IsConfidential = &isConfidential
+					if err := retrievedClient.Save(ctx, db); err != nil {
+						t.Fatalf("Save() when making client non-confidential failed: %v", err)
+					}
+					assert.Error(t, func() error {
+						_, err := GetClientByIDAndSecret(ctx, db, client.ID, newSecret)
+						return err
+					}(), "Client secret should stop authenticating after making client non-confidential")
 				} else {
 					assert.Nil(t, retrievedClient.Secret, "Non-confidential client should not have a secret")
 				}
