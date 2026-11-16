@@ -25,7 +25,7 @@ type Client struct {
 
 	ID            string                `json:"client_id,omitempty" bun:"client_id,pk"`
 	Name          string                `json:"client_name" validate:"required" bun:"client_name,notnull"`                                                                                                                    // Name of the client, used for display purposes
-	Secret        *utils.HashedString   `json:"-" bun:"client_secret,type:bytea"`                                                                                                                                             // Hashed
+	Secret        *utils.HashedString   `json:"-" bun:"client_secret,type:bytea"`                                                                                                                       // Hashed
 	Description   *string               `json:"client_description,omitempty" bun:"client_description,type:text"`                                                                                                              // Optional description of the client
 	URI           *string               `json:"client_uri,omitempty" validate:"omitempty,uri" bun:"client_uri"`                                                                                                               // Optional URI for the client
 	Logo          *string               `json:"logo_uri,omitempty" validate:"omitempty,uri" bun:"logo_uri"`                                                                                                                   // Optional logo URI for the client
@@ -158,7 +158,7 @@ func (c *Client) AfterScanRow(ctx context.Context) error {
 func (c *Client) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 	now := time.Now().UTC()
 
-	switch query.(type) {
+	switch q := query.(type) {
 	case *bun.InsertQuery:
 		id, err := utils.RandomBase58String(CLIENT_ID_BYTE_SIZE, CLIENT_ID_PREFIX)
 
@@ -175,6 +175,7 @@ func (c *Client) BeforeAppendModel(ctx context.Context, query bun.Query) error {
 		c.CreatedAt.CreatedAt = now
 		c.UpdatedAt.UpdatedAt = now
 	case *bun.UpdateQuery:
+		q.ExcludeColumn("created_at", "owner_id")
 		c.UpdatedAt.UpdatedAt = now
 	}
 
@@ -198,6 +199,8 @@ func (c *Client) NewSecret(ctx context.Context, db bun.IDB, expiresAt ...time.Ti
 		}
 	}
 
+	previousSecret := c.Secret
+	previousExpiration := c.ClientSecretExpiresAt
 	secret, err := c.newSecret()
 	if err != nil {
 		log.Printf("Error generating client secret: %v", err)
@@ -208,16 +211,22 @@ func (c *Client) NewSecret(ctx context.Context, db bun.IDB, expiresAt ...time.Ti
 		}
 	}
 
+	expirationTime := time.Unix(0, 0).UTC()
 	if len(expiresAt) > 0 {
-		expiration := utils.Epoch(expiresAt[0])
-		c.ClientSecretExpiresAt = &expiration
+		expirationTime = expiresAt[0]
 	}
+	expiration := utils.Epoch(expirationTime)
+	c.ClientSecretExpiresAt = &expiration
 
+	// Save the new secret explicitly
 	if err := c.save(ctx, db); err != nil {
 		log.Println(err)
+		c.Secret = previousSecret
+		c.ClientSecretExpiresAt = previousExpiration
 		return "", err
 	}
 
+	// Restore the raw secret value
 	hashedSecret := utils.HashedString(secret)
 	c.Secret = &hashedSecret
 	return secret, nil
@@ -240,36 +249,61 @@ func (c *Client) Sanitize() {
 }
 
 func (c *Client) Save(ctx context.Context, db bun.IDB) errors.HTTPError {
-	if c.ID == "" && (c.IsConfidential != nil && *c.IsConfidential) {
+	_, err := c.SaveWithSecret(ctx, db)
+	return err
+}
+
+// SaveWithSecret saves a client and returns a newly generated plaintext secret,
+// if one was created. Callers should disclose that value only once.
+func (c *Client) SaveWithSecret(ctx context.Context, db bun.IDB) (string, errors.HTTPError) {
+	if c.ID == "" && c.IsConfidential != nil && *c.IsConfidential {
+		previousSecret := c.Secret
+		previousExpiration := c.ClientSecretExpiresAt
 		secret, err := c.newSecret()
 		if err != nil {
 			log.Printf("Error generating new client secret: %v", err)
-			return errors.JSONAPIError{
+			return "", errors.JSONAPIError{
 				StatusCode: http.StatusInternalServerError,
 				Title:      "Failed to generate client secret",
 				Detail:     "An error occurred while generating the client secret.",
 			}
 		}
 
+		expiration := utils.Epoch(time.Unix(0, 0).UTC())
+		c.ClientSecretExpiresAt = &expiration
 		if err := c.save(ctx, db); err != nil {
-			return err
+			c.Secret = previousSecret
+			c.ClientSecretExpiresAt = previousExpiration
+			return "", err
 		}
 
 		hashedSecret := utils.HashedString(secret)
 		c.Secret = &hashedSecret
-		return nil
+		return secret, nil
 	}
 
-	return c.save(ctx, db, "client_secret")
+	if c.ID != "" && c.IsConfidential != nil && !*c.IsConfidential {
+		previousSecret := c.Secret
+		previousExpiration := c.ClientSecretExpiresAt
+		c.Secret = nil
+		expiration := utils.Epoch(time.Unix(0, 0).UTC())
+		c.ClientSecretExpiresAt = &expiration
+		if err := c.save(ctx, db); err != nil {
+			c.Secret = previousSecret
+			c.ClientSecretExpiresAt = previousExpiration
+			return "", err
+		}
+		return "", nil
+	}
+
+	if err := c.save(ctx, db, "client_secret"); err != nil {
+		return "", err
+	}
+	return "", nil
 }
 
 func (c Client) String() string {
-	client := fmt.Sprintf("\"%s\" – (ID: %s", c.Name, c.ID)
-	if c.Secret != nil {
-		client = fmt.Sprintf("%s, Secret: %s", client, c.Secret.String())
-	}
-	client = fmt.Sprintf("%s)", client)
-	return client
+	return fmt.Sprintf("\"%s\" – (ID: %s)", c.Name, c.ID)
 }
 
 func GetClientByID(ctx context.Context, db bun.IDB, id string) (*Client, errors.HTTPError) {
@@ -310,12 +344,12 @@ func GetClientByIDAndSecret(ctx context.Context, db bun.IDB, id string, secret s
 	}
 
 	hashedSecret := utils.HashedString(secret)
-	client := &Client{ID: id, Secret: &hashedSecret}
+	client := &Client{ID: id}
 	err := db.NewSelect().
 		Model(client).
 		ExcludeColumn("client_secret").
 		Where("client.client_id = ?", id).
-		Where("client.client_secret = ?", client.Secret).
+		Where("client.client_secret = ?", hashedSecret).
 		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.
 				Where("client.client_secret_expires_at = ?", utils.Epoch(time.Unix(0, 0))).

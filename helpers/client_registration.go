@@ -14,7 +14,12 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func HandleClientRegistration(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (*models.Client, errors.OIDCError) {
+type ClientRegistrationResponse struct {
+	*models.Client
+	ClientSecret string `json:"client_secret,omitempty"`
+}
+
+func HandleClientRegistration(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (*ClientRegistrationResponse, errors.OIDCError) {
 	if r.Method != http.MethodPost {
 		msg := "Unsupported request method. Only POST is allowed."
 		log.Printf("%s Got %s", msg, r.Method)
@@ -75,9 +80,10 @@ func HandleClientRegistration(ctx context.Context, db bun.IDB, w http.ResponseWr
 
 	client.OwnerID = user.ID
 
-	if err := client.Save(ctx, db); err != nil {
+	clientSecret, saveErr := client.SaveWithSecret(ctx, db)
+	if saveErr != nil {
 		msg := "Client data is invalid."
-		log.Printf("%s Error: %v", msg, err)
+		log.Printf("%s Error: %v", msg, saveErr)
 		errResp := errors.JSONError{
 			StatusCode:  http.StatusBadRequest,
 			ErrorCode:   errors.INVALID_REQUEST,
@@ -87,7 +93,11 @@ func HandleClientRegistration(ctx context.Context, db bun.IDB, w http.ResponseWr
 		return nil, errResp
 	}
 
-	return &client, nil
+	client.Secret = nil
+	return &ClientRegistrationResponse{
+		Client:       &client,
+		ClientSecret: clientSecret,
+	}, nil
 }
 
 func authenticateUser(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (*models.User, errors.OIDCError) {

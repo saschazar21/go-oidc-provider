@@ -21,6 +21,19 @@ const (
 	CLIENT_REGISTRATION_SNAPSHOT_INIT = "client_registration_init"
 )
 
+func TestClientRegistrationResponseOnlyExposesExplicitSecret(t *testing.T) {
+	storedSecret := utils.HashedString("stored-hash")
+	response := ClientRegistrationResponse{
+		Client:       &models.Client{Secret: &storedSecret},
+		ClientSecret: "one-time-secret",
+	}
+
+	body, err := json.Marshal(response)
+	assert.NoError(t, err)
+	assert.Contains(t, string(body), `"client_secret":"one-time-secret"`)
+	assert.NotContains(t, string(body), "stored-hash")
+}
+
 func TestHandleClientRegistration(t *testing.T) {
 	t.Setenv(utils.COOKIE_AUTH_KEY_ENV, "o54wWmZD1feHQAoYFp59fecpWaQ83+It2/Ko3fiyrzo=")
 
@@ -41,6 +54,8 @@ func TestHandleClientRegistration(t *testing.T) {
 	if err := test.LoadFixture("client_minimal.json", &client); err != nil {
 		t.Fatalf("failed to load client fixture: %v", err)
 	}
+	isConfidential := true
+	client.IsConfidential = &isConfidential
 
 	conn := db.Connect(ctx)
 
@@ -331,7 +346,7 @@ func TestHandleClientRegistration(t *testing.T) {
 			}
 
 			if tt.expectedStatusCode == http.StatusCreated {
-				var registeredClient *models.Client = &models.Client{}
+				var registeredClient ClientRegistrationResponse
 				if err := json.NewDecoder(resp.Body).Decode(&registeredClient); err != nil {
 					t.Fatalf("Failed to decode response body: %v", err)
 				}
@@ -339,11 +354,18 @@ func TestHandleClientRegistration(t *testing.T) {
 				assert.NotEmpty(t, registeredClient.ID, "Registered client ID should not be empty")
 				assert.Equal(t, client.Name, registeredClient.Name, "Registered client name should match")
 				assert.Equal(t, client.RedirectURIs, registeredClient.RedirectURIs, "Registered client redirect URIs should match")
+				assert.NotEmpty(t, registeredClient.ClientSecret, "Confidential client secret should be returned once during registration")
 
-				if registeredClient, err = models.GetClientByID(ctx, db, registeredClient.ID); err != nil {
+				if _, err := models.GetClientByIDAndSecret(ctx, db, registeredClient.ID, registeredClient.ClientSecret); err != nil {
+					t.Errorf("Returned client secret should authenticate: %v", err)
+				}
+
+				storedClient, err := models.GetClientByID(ctx, db, registeredClient.ID)
+				if err != nil {
 					t.Fatalf("Failed to retrieve registered client from database: %v", err)
 				}
-				assert.Equal(t, user.ID, registeredClient.OwnerID, "Registered client owner ID should match user ID")
+				assert.Equal(t, user.ID, storedClient.OwnerID, "Registered client owner ID should match user ID")
+				assert.Nil(t, storedClient.Secret, "Stored client secret must not be exposed when retrieving a client")
 			}
 		})
 	}
