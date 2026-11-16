@@ -78,26 +78,19 @@ func readSecondary(reader *bufio.Reader, client *models.Client) {
 		os.Exit(1)
 	}
 
-	var isConfidential bool
-	var isPKCERequired bool
-	if clientType == "confidential" {
-		isConfidential = true
-		isPKCERequired = false
-	} else {
-		isPKCERequired = true
-		isConfidential = false
+	if err := configureClientType(client, clientType); err != nil {
+		fmt.Printf("Invalid Client Type: %v\n", err)
+		os.Exit(1)
 	}
 
-	if isConfidential {
-		isPKCERequired, err = cli.ReadYN(reader, "Is PKCE required for this confidential client?")
+	if client.IsConfidential != nil && *client.IsConfidential {
+		isPKCERequired, err := cli.ReadYN(reader, "Is PKCE required for this confidential client?")
 		if err != nil {
 			fmt.Printf("Error reading PKCE requirement: %v\n", err)
 			os.Exit(1)
 		}
+		client.IsPKCERequired = &isPKCERequired
 	}
-
-	client.IsConfidential = &isConfidential
-	client.IsPKCERequired = &isPKCERequired
 
 	grantTypes, err := cli.ReadLine(reader, "Allowed Grant Types (comma-separated for multiple)", "authorization_code", "implicit", "client_credentials", "refresh_token")
 	if err != nil {
@@ -132,6 +125,31 @@ func readSecondary(reader *bufio.Reader, client *models.Client) {
 		responseTypeList = append(responseTypeList, responseType)
 	}
 	client.ResponseTypes = &responseTypeList
+}
+
+func configureClientType(client *models.Client, clientType string) error {
+	if client == nil {
+		return fmt.Errorf("client is nil")
+	}
+	var isConfidential bool
+	switch clientType {
+	case "confidential":
+		isConfidential = true
+	case "public":
+		isConfidential = false
+	default:
+		return fmt.Errorf("unsupported client type %q", clientType)
+	}
+
+	isPKCERequired := !isConfidential
+	authMethod := utils.AUTH_METHOD_NONE
+	if isConfidential {
+		authMethod = utils.CLIENT_SECRET_BASIC
+	}
+	client.IsConfidential = &isConfidential
+	client.IsPKCERequired = &isPKCERequired
+	client.AuthMethod = &authMethod
+	return nil
 }
 
 func readTertiary(reader *bufio.Reader, client *models.Client) {

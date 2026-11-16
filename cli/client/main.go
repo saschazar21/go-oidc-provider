@@ -10,10 +10,20 @@ import (
 	"github.com/saschazar21/go-oidc-provider/cli"
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/models"
+	"github.com/saschazar21/go-oidc-provider/utils"
 )
 
 func main() {
-	var client models.Client
+	isConfidential := false
+	pkceRequired := true
+	authMethod := utils.AUTH_METHOD_NONE
+	client := models.Client{
+		IsConfidential: &isConfidential,
+		IsPKCERequired: &pkceRequired,
+		AuthMethod:     &authMethod,
+		GrantTypes:     &[]utils.GrantType{utils.AUTHORIZATION_CODE},
+		ResponseTypes:  &[]utils.ResponseType{utils.CODE},
+	}
 
 	ctx := context.Background()
 	conn := db.Connect(ctx)
