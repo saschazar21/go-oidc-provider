@@ -1,3 +1,8 @@
+## [0.1.13] - 2026-11-16
+
+### 🐛 Bug Fixes
+
+- Fixed issues contradicting OIDC specs (#18)
 ## [0.1.12] - 2026-11-16
 
 ### 🐛 Bug Fixes
