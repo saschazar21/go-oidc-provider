@@ -144,7 +144,7 @@ func NewOpenIDConfiguration(customConfig ...*OpenIDConfiguration) (*OpenIDConfig
 	}
 
 	if config.RequestURIParameterSupported == nil {
-		b := true
+		b := false
 		config.RequestURIParameterSupported = &b
 	}
 

@@ -107,16 +107,6 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 		}
 	}
 
-	if (tr.ClientSecret == nil || *tr.ClientSecret == "") && (tr.CodeVerifier == nil || *tr.CodeVerifier == "") {
-		msg := "Client authentication failed: missing client_secret or code_verifier."
-		log.Printf("%s", msg)
-		return nil, errors.JSONError{
-			StatusCode:  http.StatusBadRequest,
-			ErrorCode:   errors.INVALID_REQUEST,
-			Description: &msg,
-		}
-	}
-
 	if tr.GrantType != utils.AUTHORIZATION_CODE || tr.Code == nil {
 		msg := fmt.Sprintf("Unsupported grant_type for token exchange: %s", tr.GrantType)
 		log.Printf("%s", msg)
@@ -133,6 +123,7 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 	query := models.NewTokenQuery(db, *tr.Code, string(utils.AUTHORIZATION_CODE_TYPE)).
 		PopulateAuthorization(true, true, "Authorization", "authorization", "token").
 		GetQuery()
+	query = query.Where("\"authorization__client\".\"client_id\" = ?", tr.ClientID)
 
 	if tr.ClientSecret != nil && *tr.ClientSecret != "" {
 		query = query.
@@ -140,8 +131,9 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 	}
 
 	if tr.CodeVerifier != nil && *tr.CodeVerifier != "" {
-		query = query.
-			Where("\"authorization\".\"code_challenge\" = ?", utils.GeneratePKCEChallenge(*tr.CodeVerifier))
+		plainChallenge := utils.GeneratePKCEChallenge(*tr.CodeVerifier, false)
+		s256Challenge := utils.GeneratePKCEChallenge(*tr.CodeVerifier)
+		query = query.Where(`((("authorization"."code_challenge_method" = 'plain' OR "authorization"."code_challenge_method" IS NULL) AND "authorization"."code_challenge" = ?) OR ("authorization"."code_challenge_method" = 'S256' AND "authorization"."code_challenge" = ?))`, plainChallenge, s256Challenge)
 	}
 
 	err = query.
@@ -155,7 +147,7 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 			log.Printf("%s", msg)
 			return nil, errors.JSONError{
 				StatusCode:  http.StatusBadRequest,
-				ErrorCode:   errors.INVALID_REQUEST,
+				ErrorCode:   errors.INVALID_GRANT,
 				Description: &msg,
 			}
 		}
@@ -179,6 +171,26 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 			Description: &msg,
 		}
 	}
+	if auth.Client == nil {
+		msg := "Client associated with the authorization code not found."
+		return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_GRANT, Description: &msg}
+	}
+	if auth.Client.IsConfidential != nil && *auth.Client.IsConfidential && (tr.ClientSecret == nil || *tr.ClientSecret == "") {
+		msg := "Confidential client authentication is required."
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusUnauthorized,
+			ErrorCode:   errors.UNAUTHORIZED,
+			Description: &msg,
+			Headers:     map[string]string{"WWW-Authenticate": `Basic realm="token", charset="UTF-8"`},
+		}
+	}
+	hasChallenge := auth.CodeChallenge != nil && *auth.CodeChallenge != ""
+	hasVerifier := tr.CodeVerifier != nil && *tr.CodeVerifier != ""
+	if (hasChallenge && !hasVerifier) || (!hasChallenge && hasVerifier) ||
+		(auth.Client.IsConfidential != nil && !*auth.Client.IsConfidential && !hasChallenge) {
+		msg := "Invalid authorization code verifier."
+		return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_GRANT, Description: &msg}
+	}
 
 	consumedAt := time.Now().UTC()
 	authorizationCode = models.Token{
@@ -189,6 +201,8 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 	result, err = db.NewUpdate().
 		Model(&authorizationCode).
 		WherePK().
+		Where("consumed_at IS NULL").
+		Where("is_active = TRUE").
 		Set("consumed_at = ?", consumedAt).
 		Set("revoked_at = ?", consumedAt).
 		Set("revocation_reason = ?", "consumed during token exchange").
@@ -218,13 +232,8 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 	}
 
 	if rowsAffected == 0 {
-		log.Println("No rows affected when marking authorization code as consumed.")
-		msg := "Failed to mark authorization code as consumed."
-		return nil, errors.JSONError{
-			StatusCode:  http.StatusInternalServerError,
-			ErrorCode:   errors.SERVER_ERROR,
-			Description: &msg,
-		}
+		msg := "Authorization code has already been used."
+		return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_GRANT, Description: &msg}
 	}
 
 	auth.ReplacedID = auth.ID
@@ -281,29 +290,11 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 		}
 	}
 
-	isConfidential, _ := db.NewSelect().
-		Model((*models.Client)(nil)).
-		Where("client_id = ?", tr.ClientID).
-		Where("is_confidential = ?", true).
-		Exists(ctx)
-
-	if isConfidential && (tr.ClientSecret == nil || *tr.ClientSecret == "") {
-		msg := "Client authentication failed: missing client_secret for confidential client."
-		log.Printf("%s", msg)
-		return nil, errors.JSONError{
-			StatusCode:  http.StatusUnauthorized,
-			ErrorCode:   errors.UNAUTHORIZED,
-			Description: &msg,
-			Headers: map[string]string{
-				"WWW-Authenticate": `Basic realm="token", charset="UTF-8"`,
-			},
-		}
-	}
-
 	var currentToken models.Token
 	var query *bun.SelectQuery
 	query = models.NewTokenQuery(db, *tr.RefreshToken, string(utils.REFRESH_TOKEN_TYPE)).
 		PopulateAuthorization(true, true, "Authorization", "authorization", "token").GetQuery()
+	query = query.Where("\"authorization__client\".\"client_id\" = ?", tr.ClientID)
 
 	if tr.ClientSecret != nil && *tr.ClientSecret != "" {
 		query = query.
@@ -318,8 +309,8 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 			msg := "Refresh Token not found or inactive."
 			log.Printf("%s", msg)
 			return nil, errors.JSONError{
-				StatusCode:  http.StatusNotFound,
-				ErrorCode:   errors.NOT_FOUND,
+				StatusCode:  http.StatusBadRequest,
+				ErrorCode:   errors.INVALID_GRANT,
 				Description: &msg,
 			}
 		}
@@ -342,6 +333,28 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 			ErrorCode:   errors.SERVER_ERROR,
 			Description: &msg,
 		}
+	}
+	if auth.Client == nil {
+		msg := "Client associated with the refresh token not found."
+		return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_GRANT, Description: &msg}
+	}
+	if auth.Client.IsConfidential != nil && *auth.Client.IsConfidential && (tr.ClientSecret == nil || *tr.ClientSecret == "") {
+		msg := "Confidential client authentication is required."
+		return nil, errors.JSONError{
+			StatusCode:  http.StatusUnauthorized,
+			ErrorCode:   errors.UNAUTHORIZED,
+			Description: &msg,
+			Headers:     map[string]string{"WWW-Authenticate": `Basic realm="token", charset="UTF-8"`},
+		}
+	}
+	if tr.Scope != nil {
+		for _, requestedScope := range *tr.Scope {
+			if !utils.ContainsValue(auth.Scope, requestedScope) {
+				msg := "Requested scope exceeds the originally granted scope."
+				return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_SCOPE, Description: &msg}
+			}
+		}
+		auth.Scope = *tr.Scope
 	}
 
 	auth.ReplacedID = auth.ID
@@ -462,7 +475,7 @@ func ParseTokenRequest(r *http.Request) (*tokenRequest, errors.OIDCError) {
 		tr.ClientSecret = &clientSecret
 	}
 
-	if tr.ClientID == "" || (tr.ClientSecret == nil && tr.CodeVerifier == nil) {
+	if tr.ClientID == "" {
 		msg := "Missing required client authentication parameters."
 		log.Printf("%s", msg)
 		return nil, errors.JSONError{

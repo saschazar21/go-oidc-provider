@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/db"
@@ -395,6 +396,26 @@ func TestAuthorizationRequest(t *testing.T) {
 			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
 				if err := createUserSession(ctx, db, r, &user); err != nil {
 					t.Fatalf("Failed to save session: %v", err)
+				}
+			},
+			WantErr: false,
+		},
+		{
+			Name:   "Existing session older than max_age requires reauthentication",
+			Method: http.MethodGet,
+			Params: createParams(url.Values{
+				"client_id":     {client.ID},
+				"client_secret": {client.Secret.String()},
+				"redirect_uri":  {client.RedirectURIs[0]},
+				"max_age":       {"1"},
+			}),
+			PreHook: func(ctx context.Context, db bun.IDB, r *http.Request) {
+				session := models.Session{UserID: user.ID, User: &user, AuthTime: time.Now().UTC().Add(-time.Hour)}
+				if err := session.Save(ctx, db); err != nil {
+					t.Fatalf("Failed to save stale session: %v", err)
+				}
+				if err := SaveSession(ctx, db, httptest.NewRecorder(), r, &session); err != nil {
+					t.Fatalf("Failed to write stale session cookie: %v", err)
 				}
 			},
 			WantErr: false,

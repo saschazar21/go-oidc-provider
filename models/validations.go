@@ -73,6 +73,24 @@ func (a *Authorization) Validate() errors.OIDCError {
 			RedirectURI: a.RedirectURI,
 		}
 	}
+	if !utils.ContainsValue(a.Scope, utils.OPENID) {
+		description := "scope must include openid for an OpenID Connect request"
+		return errors.OIDCErrorResponse{ErrorCode: errors.INVALID_SCOPE, ErrorDescription: &description, RedirectURI: a.RedirectURI}
+	}
+	if a.Nonce == nil || *a.Nonce == "" {
+		switch a.ResponseType {
+		case utils.ID_TOKEN, utils.ID_TOKEN_TOKEN, utils.CODE_ID_TOKEN, utils.CODE_ID_TOKEN_TOKEN:
+			description := "nonce is required for this response_type"
+			return errors.OIDCErrorResponse{ErrorCode: errors.INVALID_REQUEST, ErrorDescription: &description, RedirectURI: a.RedirectURI}
+		}
+	}
+	if a.ResponseMode != nil && *a.ResponseMode == utils.QUERY {
+		switch a.ResponseType {
+		case utils.TOKEN, utils.ID_TOKEN, utils.ID_TOKEN_TOKEN, utils.CODE_TOKEN, utils.CODE_ID_TOKEN, utils.CODE_ID_TOKEN_TOKEN:
+			description := "query response_mode is not permitted for this response_type"
+			return errors.OIDCErrorResponse{ErrorCode: errors.INVALID_REQUEST, ErrorDescription: &description, RedirectURI: a.RedirectURI}
+		}
+	}
 
 	client := a.Client
 
@@ -84,7 +102,9 @@ func (a *Authorization) Validate() errors.OIDCError {
 		}
 	}
 
-	if (a.Client.IsPKCERequired != nil && *a.Client.IsPKCERequired) && (a.CodeChallenge == nil || *a.CodeChallenge == "") {
+	publicClient := a.Client.IsConfidential == nil || !*a.Client.IsConfidential
+	pkceRequired := publicClient || (a.Client.IsPKCERequired != nil && *a.Client.IsPKCERequired)
+	if pkceRequired && (a.CodeChallenge == nil || *a.CodeChallenge == "") {
 		description := "PKCE is required for this client, but no code_challenge provided"
 		log.Println(description)
 		return errors.OIDCErrorResponse{

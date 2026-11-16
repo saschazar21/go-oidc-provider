@@ -42,6 +42,8 @@ func (ar *authorizationRequest) parseSession(ctx context.Context, db bun.IDB) er
 	}
 
 	ar.authorization.User = session.User // do not set UserID yet, will be set in HandleAuthorizationRequest
+	authTime := session.AuthTime
+	ar.authorization.AuthTime = &authTime
 
 	return nil
 }
@@ -100,7 +102,9 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 		}
 	}
 
-	if (client.IsPKCERequired != nil && *client.IsPKCERequired) && (ar.authorization.CodeChallenge == nil || *ar.authorization.CodeChallenge == "") {
+	publicClient := client.IsConfidential == nil || !*client.IsConfidential
+	pkceRequired := publicClient || (client.IsPKCERequired != nil && *client.IsPKCERequired)
+	if pkceRequired && (ar.authorization.CodeChallenge == nil || *ar.authorization.CodeChallenge == "") {
 		msg := "PKCE is required for this client, but no code_challenge provided."
 		log.Printf("%s", msg)
 
@@ -117,7 +121,8 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 }
 
 func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, db bun.IDB) errors.OIDCError {
-	if ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.LOGIN {
+	if (ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.LOGIN) ||
+		(ar.authorization.MaxAge != nil && *ar.authorization.MaxAge == 0) {
 		log.Printf("Prompt is set to 'login', redirecting to login page")
 		return errors.InternalRedirectError{
 			StatusCode: ar.getCorrectRedirectStatusCode(),
@@ -139,6 +144,15 @@ func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, 
 
 	if err != nil {
 		return err
+	}
+	if ar.authorization.MaxAge != nil {
+		if ar.authorization.AuthTime == nil || time.Since(*ar.authorization.AuthTime).Seconds() > float64(*ar.authorization.MaxAge) {
+			if ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.NONE {
+				msg := "Prompt is set to 'none', but the authentication is too old."
+				return errors.OIDCErrorResponse{ErrorCode: errors.LOGIN_REQUIRED, ErrorDescription: &msg, RedirectURI: ar.authorization.RedirectURI}
+			}
+			return errors.InternalRedirectError{StatusCode: ar.getCorrectRedirectStatusCode(), Location: LOGIN_ENDPOINT}
+		}
 	}
 
 	auth := ar.authorization
@@ -437,6 +451,14 @@ func ParseAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseW
 	ar, err = parseAuthorizationRequest(w, r)
 	if err != nil {
 		return
+	}
+	if ar.params.Has("request") {
+		msg := "Request Objects are not supported."
+		return nil, errors.OIDCErrorResponse{ErrorCode: errors.REQUEST_NOT_SUPPORTED, ErrorDescription: &msg, RedirectURI: ar.params.Get("redirect_uri")}
+	}
+	if ar.params.Has("request_uri") {
+		msg := "Request URI processing is not supported."
+		return nil, errors.OIDCErrorResponse{ErrorCode: errors.REQUEST_URI_NOT_SUPPORTED, ErrorDescription: &msg, RedirectURI: ar.params.Get("redirect_uri")}
 	}
 
 	if ar.authorization != nil {

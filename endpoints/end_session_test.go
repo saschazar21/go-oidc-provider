@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/saschazar21/go-oidc-provider/db"
@@ -54,6 +57,7 @@ func TestHandleEndSession(t *testing.T) {
 	}
 
 	client.OwnerID = user.ID
+	client.PostLogoutRedirectURIs = []string{"https://client.example.com/logout"}
 	if err := client.Save(ctx, conn); err != nil {
 		t.Fatalf("failed to save client: %v", err)
 	}
@@ -74,12 +78,14 @@ func TestHandleEndSession(t *testing.T) {
 		name          string
 		setupSession  func(ctx context.Context, db bun.IDB) *models.Session
 		createRequest func(s *models.Session) (r *http.Request)
+		confirm       bool
 		wantErr       bool
 	}
 
 	tests := []testStruct{
 		{
 			name: "Valid request with session cookie",
+			confirm: true,
 			setupSession: func(ctx context.Context, db bun.IDB) *models.Session {
 				s := models.Session{
 					UserID:   user.ID,
@@ -108,7 +114,7 @@ func TestHandleEndSession(t *testing.T) {
 			},
 		},
 		{
-			name: "Invalid request with POST method",
+			name: "POST requires a confirmation form",
 			setupSession: func(ctx context.Context, db bun.IDB) *models.Session {
 				return nil
 			},
@@ -145,10 +151,25 @@ func TestHandleEndSession(t *testing.T) {
 				return nil
 			},
 			createRequest: func(s *models.Session) *http.Request {
-				req, _ := http.NewRequest(http.MethodGet, "/logout?post_logout_redirect_uri=https://client.example.com/logout&state=abc", nil)
+				query := url.Values{
+					"client_id":                {client.ID},
+					"post_logout_redirect_uri": {"https://client.example.com/logout"},
+					"state":                    {"abc"},
+				}
+				req, _ := http.NewRequest(http.MethodGet, "/logout?"+query.Encode(), nil)
 				return req
 			},
 			wantErr: false,
+		},
+		{
+			name: "Request with unregistered post_logout_redirect_uri",
+			setupSession: func(ctx context.Context, db bun.IDB) *models.Session { return nil },
+			createRequest: func(s *models.Session) *http.Request {
+				query := url.Values{"client_id": {client.ID}, "post_logout_redirect_uri": {"https://attacker.example/"}}
+				req, _ := http.NewRequest(http.MethodGet, "/logout?"+query.Encode(), nil)
+				return req
+			},
+			wantErr: true,
 		},
 	}
 
@@ -169,16 +190,42 @@ func TestHandleEndSession(t *testing.T) {
 
 			req := tt.createRequest(session)
 			w := httptest.NewRecorder()
+			if tt.confirm {
+				HandleEndSession(w, req)
+				assert.Equal(t, http.StatusOK, w.Code)
+				match := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(w.Body.String())
+				if len(match) != 2 {
+					t.Fatal("logout confirmation page did not include a CSRF value")
+				}
+				postForm := url.Values{"csrf": {match[1]}, "confirm": {"yes"}}
+				postReq, err := http.NewRequest(http.MethodPost, "/logout", strings.NewReader(postForm.Encode()))
+				if err != nil {
+					t.Fatalf("failed to create logout confirmation request: %v", err)
+				}
+				postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				for _, cookie := range req.Cookies() {
+					postReq.AddCookie(cookie)
+				}
+				for _, cookie := range w.Result().Cookies() {
+					postReq.AddCookie(cookie)
+				}
+				req = postReq
+				w = httptest.NewRecorder()
+			}
 
 			HandleEndSession(w, req)
 
 			res := w.Result()
 
 			if !tt.wantErr {
-				assert.Equal(t, http.StatusTemporaryRedirect, res.StatusCode, "expected status code to be 307 Temporary Redirect")
-
-				assert.NotEmpty(t, w.Header().Get("Set-Cookie"), "expected Set-Cookie header to be set")
-				assert.Contains(t, w.Header().Get("Set-Cookie"), helpers.SESSION_COOKIE_NAME, "expected session cookie to be set")
+				if tt.confirm {
+					assert.Equal(t, http.StatusSeeOther, res.StatusCode, "confirmed logout should redirect after POST")
+				} else {
+					assert.Equal(t, http.StatusOK, res.StatusCode, "GET should show a logout confirmation page")
+					assert.Contains(t, w.Body.String(), "Confirm logout")
+					assert.Contains(t, w.Header().Get("Set-Cookie"), helpers.LOGOUT_COOKIE_NAME, "expected signed confirmation cookie")
+					assert.NotContains(t, res.Header.Get("Location"), "client.example.com", "GET must not redirect before logout confirmation")
+				}
 
 				if session == nil {
 					return
@@ -192,10 +239,9 @@ func TestHandleEndSession(t *testing.T) {
 					WherePK().
 					Scan(ctx)
 
-				assert.False(t, *updatedSession.IsActive, "expected session to be inactive")
-				assert.NotNil(t, updatedSession.LogoutReason, "expected logout reason to be set")
+				assert.Equal(t, !tt.confirm, *updatedSession.IsActive, "session activity should change only after confirmation")
 			} else {
-				assert.NotEqual(t, http.StatusTemporaryRedirect, res.StatusCode, "expected status code not to be 307 Temporary Redirect")
+				assert.NotEqual(t, http.StatusOK, res.StatusCode, "expected the invalid request to be rejected")
 			}
 		})
 	}

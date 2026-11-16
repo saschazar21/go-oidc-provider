@@ -9,9 +9,60 @@ import (
 	"github.com/google/uuid"
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/test"
+	"github.com/saschazar21/go-oidc-provider/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
+
+func TestAuthorizationRequiresNonceForIDTokenResponses(t *testing.T) {
+	for _, responseType := range []utils.ResponseType{
+		utils.ID_TOKEN,
+		utils.ID_TOKEN_TOKEN,
+		utils.CODE_ID_TOKEN,
+		utils.CODE_ID_TOKEN_TOKEN,
+	} {
+		t.Run(string(responseType), func(t *testing.T) {
+			authorization := Authorization{
+				Scope:        []utils.Scope{utils.OPENID},
+				RedirectURI:  "https://client.example/callback",
+				ResponseType: responseType,
+				ClientID:     "client",
+				Client:       &Client{},
+			}
+			if err := authorization.Validate(); err == nil {
+				t.Fatal("expected missing nonce to be rejected")
+			}
+		})
+	}
+}
+
+func TestAuthorizationRejectsQueryModeForTokenResponses(t *testing.T) {
+	queryMode := utils.QUERY
+	for _, responseType := range []utils.ResponseType{
+		utils.TOKEN,
+		utils.ID_TOKEN,
+		utils.ID_TOKEN_TOKEN,
+		utils.CODE_TOKEN,
+		utils.CODE_ID_TOKEN,
+		utils.CODE_ID_TOKEN_TOKEN,
+	} {
+		t.Run(string(responseType), func(t *testing.T) {
+			nonce := "nonce"
+			authorization := Authorization{
+				Scope:        []utils.Scope{utils.OPENID},
+				RedirectURI:  "https://client.example/callback",
+				ResponseType: responseType,
+				ResponseMode: &queryMode,
+				ClientID:     "client",
+				Client:       &Client{},
+				Nonce:        &nonce,
+			}
+			if err := authorization.Validate(); err == nil {
+				t.Fatal("expected query response mode to be rejected")
+			}
+		})
+	}
+}
 
 func TestAuthorization(t *testing.T) {
 	ctx := context.Background()

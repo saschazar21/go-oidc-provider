@@ -92,6 +92,7 @@ func TestHandleToken(t *testing.T) {
 				q.Add("grant_type", "authorization_code")
 				q.Add("code", string(token.Value))
 				q.Add("redirect_uri", auth.RedirectURI)
+				q.Add("code_verifier", "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
 
 				req, httpErr := http.NewRequest(http.MethodPost, origin+"/token", strings.NewReader(q.Encode()))
 				if httpErr != nil {

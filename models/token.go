@@ -445,7 +445,7 @@ func createToken(ctx context.Context, db bun.IDB, tokenType utils.TokenType, raw
 		}
 	case utils.REFRESH_TOKEN_TYPE:
 		lifetime := REFRESH_TOKEN_LIFETIME // Default expiration to 30 days
-		if client != nil && client.AccessTokenLifetime > 0 {
+		if client != nil && client.RefreshTokenLifetime > 0 {
 			lifetime = time.Duration(client.RefreshTokenLifetime) * time.Second
 		}
 		token.ExpiresAt = ExpiresAt{

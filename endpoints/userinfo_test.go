@@ -131,7 +131,7 @@ func TestHandleUserinfo(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
-			name: "Valid JWT bearer token",
+			name: "ID token is rejected as a bearer token",
 			preHook: func(ctx context.Context, conn bun.IDB) string {
 				jwtToken, err := idtoken.NewSignedJWTFromAuthorization(&auth)
 				if err != nil {
@@ -144,7 +144,7 @@ func TestHandleUserinfo(t *testing.T) {
 				req.Header.Set("Authorization", "Bearer "+tokenString)
 				return req
 			},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name: "Invalid bearer token",

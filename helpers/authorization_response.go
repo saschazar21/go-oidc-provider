@@ -183,6 +183,9 @@ func (ar *authorizationResponse) populateResponse(ctx context.Context, db bun.ID
 			StatusCode:       http.StatusBadRequest,
 		}
 	}
+	if ar.authorization.ResponseMode != nil {
+		ar.IsFragment = *ar.authorization.ResponseMode == utils.FRAGMENT
+	}
 
 	return nil
 }
