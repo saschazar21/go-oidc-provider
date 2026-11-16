@@ -1,3 +1,8 @@
+## [0.1.12] - 2026-11-16
+
+### 🐛 Bug Fixes
+
+- *(models)* Fix secure client secret lifecycle (#17)
 ## [0.1.11] - 2026-06-19
 
 ### 🐛 Bug Fixes
