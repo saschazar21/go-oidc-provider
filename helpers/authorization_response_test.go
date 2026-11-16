@@ -94,7 +94,7 @@ func TestAuthorizationResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Implicit flow without nonce and with id_token",
+			name: "Implicit flow with nonce and id_token",
 			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
 				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.ID_TOKEN}
 				if err := client.Save(ctx, db); err != nil {
@@ -103,7 +103,7 @@ func TestAuthorizationResponse(t *testing.T) {
 
 				authorization := *auth
 				authorization.ResponseType = utils.ID_TOKEN
-				authorization.Nonce = nil
+				authorization.Nonce = auth.Nonce
 				if err := authorization.Save(ctx, db); err != nil {
 					t.Fatalf("Failed to save authorization fixture: %v", err)
 				}
@@ -129,7 +129,7 @@ func TestAuthorizationResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Hybrid flow without nonce and with code id_token",
+			name: "Hybrid flow with nonce and code id_token",
 			preHook: func(ctx context.Context, db bun.IDB) *models.Authorization {
 				client.ResponseTypes = &[]utils.ResponseType{utils.CODE, utils.CODE_ID_TOKEN}
 				if err := client.Save(ctx, db); err != nil {
@@ -137,7 +137,7 @@ func TestAuthorizationResponse(t *testing.T) {
 				}
 				authorization := *auth
 				authorization.ResponseType = utils.CODE_ID_TOKEN
-				authorization.Nonce = nil
+				authorization.Nonce = auth.Nonce
 				if err := authorization.Save(ctx, db); err != nil {
 					t.Fatalf("Failed to save authorization fixture: %v", err)
 				}

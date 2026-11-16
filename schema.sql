@@ -224,13 +224,14 @@ CREATE TABLE oidc_authorizations (
     
     -- PKCE (Proof Key for Code Exchange)
     code_challenge TEXT,
-    code_challenge_method VARCHAR(10) DEFAULT 'S256' CHECK (
+    code_challenge_method VARCHAR(10) DEFAULT 'plain' CHECK (
         code_challenge_method IN ('plain', 'S256')
     ),
     
     -- State/nonce
     state VARCHAR(255),
     nonce VARCHAR(255),
+    auth_time TIMESTAMPTZ,
     
     -- Status
     is_active BOOLEAN DEFAULT FALSE,

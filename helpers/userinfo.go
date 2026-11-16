@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/saschazar21/go-oidc-provider/errors"
-	"github.com/saschazar21/go-oidc-provider/idtoken"
 	"github.com/saschazar21/go-oidc-provider/models"
 	"github.com/saschazar21/go-oidc-provider/utils"
 	"github.com/uptrace/bun"
@@ -44,12 +43,6 @@ func HandleUserinfoRequest(ctx context.Context, db bun.IDB, r *http.Request) (*m
 				"WWW-Authenticate": `Bearer realm="userinfo", charset="UTF-8"`,
 			},
 		}
-	}
-
-	var claims *idtoken.Claims
-	if claims, err = idtoken.ParseJWT(bearer); err == nil && claims != nil {
-		log.Printf("Bearer token is a valid JWT, using claims from token...")
-		return claims.User, nil
 	}
 
 	var token *models.Token

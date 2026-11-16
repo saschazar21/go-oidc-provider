@@ -91,7 +91,7 @@ func TestHandleUserinfoRequest(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Valid JWT access token",
+			name: "ID token is not accepted as an access token",
 			preHook: func(ctx context.Context, db bun.IDB) string {
 				jwtToken, err := idtoken.NewSignedJWTFromAuthorization(&auth)
 				if err != nil {
@@ -101,7 +101,7 @@ func TestHandleUserinfoRequest(t *testing.T) {
 				return jwtToken
 			},
 			method:  http.MethodPost,
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "Invalid access token",

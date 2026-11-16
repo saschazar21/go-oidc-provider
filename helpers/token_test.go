@@ -83,6 +83,7 @@ func TestExchangeToken(t *testing.T) {
 	clientSecret := string(*client.Secret)
 	invalidSecret := "invalid"
 	invalidRedirectURI := "https://invalid.example.com/callback"
+	codeVerifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 
 	tests := []testStruct{
 		{
@@ -94,6 +95,7 @@ func TestExchangeToken(t *testing.T) {
 				GrantType:    "authorization_code",
 				ClientID:     client.ID,
 				ClientSecret: &clientSecret,
+				CodeVerifier: &codeVerifier,
 				Code:         nil, // Will be set in the test
 				RedirectURI:  &authorization.RedirectURI,
 			},
@@ -119,6 +121,7 @@ func TestExchangeToken(t *testing.T) {
 				GrantType:    "authorization_code",
 				ClientID:     client.ID,
 				ClientSecret: &clientSecret,
+				CodeVerifier: &codeVerifier,
 				Code:         nil, // Will be set in the test
 				RedirectURI:  &authorization.RedirectURI,
 			},
@@ -177,6 +180,35 @@ func TestExchangeToken(t *testing.T) {
 				ClientID:     client.ID,
 				ClientSecret: &invalidSecret,
 				Code:         nil, // Will be set in the test
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Exchange Authorization Code with Wrong Client ID",
+			PreHook: func(ctx context.Context, db bun.IDB) (*models.Token, error) {
+				return models.CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     "different-client",
+				ClientSecret: &clientSecret,
+				CodeVerifier: &codeVerifier,
+				Code:         nil,
+				RedirectURI:  &authorization.RedirectURI,
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Exchange Confidential Authorization Code with Verifier but No Secret",
+			PreHook: func(ctx context.Context, db bun.IDB) (*models.Token, error) {
+				return models.CreateToken(ctx, db, string(utils.AUTHORIZATION_CODE_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "authorization_code",
+				ClientID:     client.ID,
+				CodeVerifier: &codeVerifier,
+				Code:         nil,
 				RedirectURI:  &authorization.RedirectURI,
 			},
 			WantErr: true,
@@ -264,6 +296,10 @@ func TestExchangeToken(t *testing.T) {
 				assert.NotNil(t, token.RevocationReason, "Expected authorization code to have revocation reason set")
 				assert.Equal(t, token.ConsumedAt, token.RevokedAt, "Expected authorization code ConsumedAt to match RevokedAt")
 				assert.False(t, *token.IsActive, "Expected authorization code to be inactive after exchange")
+
+				if _, replayErr := tt.Request.HandleRequest(ctx, db); replayErr == nil {
+					t.Fatal("Expected a redeemed authorization code to be rejected on replay")
+				}
 			} else {
 				assert.Nil(t, tokens, "Expected tokens to be nil on error")
 			}
@@ -395,6 +431,19 @@ func TestRotateToken(t *testing.T) {
 				ClientID:     client.ID,
 				ClientSecret: &invalidClientSecret,
 				RefreshToken: nil, // Will be set in the test
+			},
+			WantErr: true,
+		},
+		{
+			Name: "Rotate Refresh Token with Wrong Client ID",
+			PreHook: func(ctx context.Context, db bun.IDB) (*models.Token, error) {
+				return models.CreateToken(ctx, db, string(utils.REFRESH_TOKEN_TYPE), &authorization)
+			},
+			Request: tokenRequest{
+				GrantType:    "refresh_token",
+				ClientID:     "different-client",
+				ClientSecret: &clientSecret,
+				RefreshToken: nil,
 			},
 			WantErr: true,
 		},

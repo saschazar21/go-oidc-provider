@@ -483,7 +483,7 @@ func validatePKCEMethod(fl validator.FieldLevel) bool {
 
 	validPKCEMethods := []PKCEMethod{
 		S256,
-		PKCE_NONE,
+		PLAIN,
 	}
 
 	for _, validPKCEMethod := range validPKCEMethods {

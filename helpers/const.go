@@ -23,6 +23,8 @@ const (
 	REDIRECT_URI               = "uri"
 	SESSION_COOKIE_NAME        = "session"
 	SESSION_COOKIE_ID          = "id"
+	LOGOUT_COOKIE_NAME         = "logout_confirmation"
+	LOGOUT_COOKIE_CSRF         = "csrf"
 
 	LOGOUT_REASON_ID_TOKEN_HINT = "ID token hint"
 	LOGOUT_REASON_END_SESSION   = "end session endpoint"

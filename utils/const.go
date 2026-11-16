@@ -75,6 +75,7 @@ const (
 
 const (
 	S256      PKCEMethod = "S256"
+	PLAIN     PKCEMethod = "plain"
 	PKCE_NONE PKCEMethod = "none"
 )
 
