@@ -104,6 +104,12 @@ func SaveSession(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http
 		}
 	}
 
+	return WriteSessionCookie(w, r, session)
+}
+
+// WriteSessionCookie emits the cookie for an already persisted session. Callers
+// managing a transaction must commit it successfully before calling this.
+func WriteSessionCookie(w http.ResponseWriter, r *http.Request, session *models.Session) errors.HTTPError {
 	cookieSession, err := utils.NewCookieStore().Get(r, SESSION_COOKIE_NAME)
 	if err != nil {
 		log.Printf("Error retrieving session cookie: %v", err)

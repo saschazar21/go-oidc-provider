@@ -4,7 +4,10 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/saschazar21/go-oidc-provider/db"
 	"github.com/saschazar21/go-oidc-provider/errors"
@@ -93,6 +96,7 @@ func handleMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleConsumeMagicLinkToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	// Implementation of the consume magic link token endpoint /login/magic
 	if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
 		msg := "Unsupported Content-Type. Only application/x-www-form-urlencoded is allowed."
@@ -137,6 +141,8 @@ func handleConsumeMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defer trx.Rollback()
+
 	token, err := helpers.ConsumeMagicLinkToken(ctx, trx, w, r)
 	if err != nil {
 		if err := trx.Rollback(); err != nil {
@@ -153,17 +159,32 @@ func handleConsumeMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if token == nil || token.Result == nil || *token.Result != utils.SUCCESS || token.User == nil {
+		// FAILED and EXPIRED are terminal model outcomes, not Go errors. Persist
+		// them before rejecting so a second attempt cannot reuse the token.
+		if err := trx.Commit(); err != nil {
+			log.Printf("Failed to commit rejected magic link token: %v", err)
+			errors.HTTPErrorResponse{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Description: "Failed to process request"}.Write(w)
+			return
+		}
+		errors.HTTPErrorResponse{StatusCode: http.StatusBadRequest, Message: "Bad Request", Description: "Invalid or expired magic link token"}.Write(w)
+		return
+	}
+
 	ipAddress := utils.EncryptedString(utils.ParseClientIP(r))
 	userAgent := r.Header.Get("User-Agent")
+	methods := []utils.AMR{utils.AMR_EMAIL}
 
 	session := models.Session{
 		UserID:    token.User.ID,
 		User:      token.User,
 		IPAddress: &ipAddress,
 		UserAgent: &userAgent,
+		AMR:       &methods,
+		AuthTime:  time.Now().UTC(),
 	}
 
-	if err := helpers.SaveSession(ctx, conn, w, r, &session); err != nil {
+	if err := session.Save(ctx, trx); err != nil {
 		if err := trx.Rollback(); err != nil {
 			log.Printf("Failed to rollback transaction: %v", err)
 		}
@@ -191,6 +212,11 @@ func handleConsumeMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := helpers.WriteSessionCookie(w, r, &session); err != nil {
+		err.Write(w)
+		return
+	}
+
 	cookieSession := utils.NewCookieStore()
 	redirectSession, _ := cookieSession.Get(r, helpers.AUTHORIZATION_COOKIE_NAME)
 	authId, ok := redirectSession.Values[helpers.AUTHORIZATION_COOKIE_ID].(string)
@@ -214,9 +240,28 @@ func handleConsumeMagicLinkToken(w http.ResponseWriter, r *http.Request) {
 		}
 
 		http.SetCookie(w, expiredCookie)
-		http.Redirect(w, r, redirectCookie.Value, http.StatusSeeOther)
+		location := "/"
+		if isSafeMagicLinkRedirect(redirectCookie.Value) {
+			location = redirectCookie.Value
+		}
+		http.Redirect(w, r, location, http.StatusSeeOther)
 		return
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func isSafeMagicLinkRedirect(location string) bool {
+	parsed, err := url.Parse(location)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || parsed.Opaque != "" {
+		return false
+	}
+	// Check the decoded path too, so encoded slashes/backslashes cannot turn a
+	// local continuation into a browser-interpreted network-path reference.
+	for _, value := range []string{location, parsed.Path} {
+		if !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || strings.Contains(value, `\`) || strings.ContainsFunc(value, unicode.IsControl) {
+			return false
+		}
+	}
+	return true
 }
