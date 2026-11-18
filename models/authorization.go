@@ -33,9 +33,10 @@ type Authorization struct {
 	CodeChallenge       *string           `json:"code_challenge,omitempty" schema:"code_challenge" bun:"code_challenge"`                                                       // Code challenge for PKCE, if applicable
 	CodeChallengeMethod *utils.PKCEMethod `json:"code_challenge_method,omitempty" schema:"code_challenge_method" validate:"omitempty,pkce-method" bun:"code_challenge_method"` // Method used for the code challenge, if applicable
 
-	State *string `json:"state,omitempty" schema:"state" bun:"state"` // State parameter for the authorization request, if applicable
-	Nonce *string `json:"nonce,omitempty" schema:"nonce" bun:"nonce"` // Nonce parameter for the authorization request, if applicable
-	AuthTime *time.Time `json:"-" schema:"-" bun:"auth_time"` // Time at which the End-User authenticated
+	State        *string             `json:"state,omitempty" schema:"state" bun:"state"`  // State parameter for the authorization request, if applicable
+	Nonce        *string             `json:"nonce,omitempty" schema:"nonce" bun:"nonce"`  // Nonce parameter for the authorization request, if applicable
+	AuthTime     *time.Time          `json:"-" schema:"-" bun:"auth_time"`                // Time at which the End-User authenticated
+	AMR          *[]utils.AMR        `json:"-" schema:"-" bun:"amr,type:oidc_amr_type[]"` // Trusted authentication evidence, unknown for legacy grants
 	ResponseMode *utils.ResponseMode `json:"-" schema:"response_mode" validate:"omitempty,response-mode" bun:"-"`
 
 	IsActive bool              `json:"is_active" schema:"-" bun:"is_active"`
@@ -53,7 +54,7 @@ type Authorization struct {
 	// Additional request parameters for the authorization
 	ClientSecret *string       `json:"-" schema:"client_secret" bun:"-"`                                     // Optional client secret for the authorization, if applicable
 	LoginHint    *string       `json:"login_hint,omitempty" schema:"login_hint" bun:"-"`                     // Optional login hint for the authorization, if applicable
-	MaxAge       *uint64       `json:"max_age,omitempty" schema:"max_age" validate:"omitempty" bun:"-"` // Optional maximum age for the authorization, in seconds
+	MaxAge       *uint64       `json:"max_age,omitempty" schema:"max_age" validate:"omitempty" bun:"-"`      // Optional maximum age for the authorization, in seconds
 	Prompt       *utils.Prompt `json:"prompt,omitempty" schema:"prompt" validate:"omitempty,prompt" bun:"-"` // Optional prompt parameter for the authorization, if applicable
 
 	ApprovedAt *time.Time `json:"approved_at,omitempty" bun:"approved_at"` // Timestamp when the authorization was approved, if applicable

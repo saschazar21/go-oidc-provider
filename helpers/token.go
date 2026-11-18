@@ -16,14 +16,89 @@ import (
 )
 
 type tokenRequest struct {
-	GrantType    utils.GrantType   `json:"grant_type" schema:"grant_type" validate:"required,grant-type"`
-	Code         *string           `json:"code" schema:"code" validate:"required_if=GrantType authorization_code"`
-	RedirectURI  *string           `json:"redirect_uri" schema:"redirect_uri" validate:"required_if=GrantType authorization_code"`
-	ClientID     string            `json:"client_id" schema:"client_id" validate:"required"`
-	ClientSecret *string           `json:"client_secret" schema:"client_secret"`
-	CodeVerifier *string           `json:"code_verifier" schema:"code_verifier"`
-	RefreshToken *string           `json:"refresh_token" schema:"refresh_token" validate:"required_if=GrantType refresh_token"`
-	Scope        *utils.ScopeSlice `json:"scope" schema:"scope" validate:"omitempty,dive,scope"`
+	policy       *authenticationPolicy `json:"-" schema:"-"`
+	GrantType    utils.GrantType       `json:"grant_type" schema:"grant_type" validate:"required,grant-type"`
+	Code         *string               `json:"code" schema:"code" validate:"required_if=GrantType authorization_code"`
+	RedirectURI  *string               `json:"redirect_uri" schema:"redirect_uri" validate:"required_if=GrantType authorization_code"`
+	ClientID     string                `json:"client_id" schema:"client_id" validate:"required"`
+	ClientSecret *string               `json:"client_secret" schema:"client_secret"`
+	CodeVerifier *string               `json:"code_verifier" schema:"code_verifier"`
+	RefreshToken *string               `json:"refresh_token" schema:"refresh_token" validate:"required_if=GrantType refresh_token"`
+	Scope        *utils.ScopeSlice     `json:"scope" schema:"scope" validate:"omitempty,dive,scope"`
+}
+
+// Reuse caller transactions: the user lock must survive until their commit or
+// rollback. DB/Conn callers get the same atomic issuance boundary automatically.
+func runOIDCIssuance[T any](ctx context.Context, db bun.IDB, issue func(context.Context, bun.IDB) (T, errors.OIDCError)) (result T, oidcErr errors.OIDCError) {
+	switch db.(type) {
+	case bun.Tx, *bun.Tx:
+		return issue(ctx, db)
+	}
+	err := db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		result, oidcErr = issue(ctx, tx)
+		return oidcErr
+	})
+	if err != nil {
+		var zero T
+		if oidcErr != nil {
+			return zero, oidcErr
+		}
+		msg := "Failed to complete issuance transaction."
+		return zero, errors.JSONError{StatusCode: http.StatusInternalServerError, ErrorCode: errors.SERVER_ERROR, Description: &msg}
+	}
+	return result, nil
+}
+
+func lockIssuanceUser(ctx context.Context, db bun.IDB, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return sql.ErrNoRows
+	}
+	var id uuid.UUID
+	return db.NewSelect().TableExpr("oidc_users").Column("user_id").
+		Where("user_id = ?", userID).For("UPDATE").Scan(ctx, &id)
+}
+
+// Raw scans deliberately skip Token.AfterSelect, which updates last_used_at via
+// the pool (outside the caller transaction). Even a preliminary lookup must not
+// lock a token before the user: password mutation uses user -> tokens ordering.
+func scanIssuanceToken(ctx context.Context, db bun.IDB, query *bun.SelectQuery, token *models.Token) error {
+	query = query.Where(`"token"."expires_at" > clock_timestamp()`).
+		Where(`"authorization"."expires_at" > clock_timestamp()`)
+	if err := db.NewRaw(query.String()).Scan(ctx, token); err != nil {
+		return err
+	}
+	if token.Authorization == nil {
+		return sql.ErrNoRows
+	}
+	userID, tokenID := token.Authorization.UserID, token.ID
+	if err := lockIssuanceUser(ctx, db, userID); err != nil {
+		return err
+	}
+	// This is a new statement/snapshot AFTER acquiring the shared user lock.
+	// Never accept the token/authorization evidence loaded before that lock.
+	*token = models.Token{}
+	return db.NewRaw(query.Where(`"authorization"."user_id" = ?`, userID).
+		Where(`"token"."token_id" = ?`, tokenID).
+		For(`UPDATE OF "token", "authorization"`).String()).Scan(ctx, token)
+}
+
+// Token.AfterSelect records usage. Filter insufficient grants in SQL as well as
+// checking the loaded evidence so rejection happens before that mutation hook.
+func filterTokenAuthenticationPolicy(ctx context.Context, query *bun.SelectQuery) *bun.SelectQuery {
+	policy, configured := ctx.Value(authenticationPolicyKey{}).(authenticationPolicy)
+	if !configured {
+		return query
+	}
+	if len(policy.methods) == 0 {
+		return query.Where("FALSE")
+	}
+	for _, method := range policy.methods {
+		if method == "" {
+			return query.Where("FALSE")
+		}
+		query = query.Where(`? = ANY("authorization"."amr"::text[])`, string(method))
+	}
+	return query
 }
 
 func (tr *tokenRequest) clientCredentials(ctx context.Context, db bun.IDB) (map[utils.TokenType]*models.Token, errors.OIDCError) {
@@ -96,6 +171,13 @@ func (tr *tokenRequest) clientCredentials(ctx context.Context, db bun.IDB) (map[
 }
 
 func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[utils.TokenType]*models.Token, errors.OIDCError) {
+	return runOIDCIssuance(ctx, db, tr.exchangeTokenInTx)
+}
+
+func (tr *tokenRequest) exchangeTokenInTx(ctx context.Context, db bun.IDB) (map[utils.TokenType]*models.Token, errors.OIDCError) {
+	if tr.policy != nil {
+		ctx = context.WithValue(ctx, authenticationPolicyKey{}, *tr.policy)
+	}
 	if err := tr.Validate(); err != nil {
 		log.Printf("Validation error: %v", err)
 		msg := "Request contained invalid parameters."
@@ -136,10 +218,11 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 		query = query.Where(`((("authorization"."code_challenge_method" = 'plain' OR "authorization"."code_challenge_method" IS NULL) AND "authorization"."code_challenge" = ?) OR ("authorization"."code_challenge_method" = 'S256' AND "authorization"."code_challenge" = ?))`, plainChallenge, s256Challenge)
 	}
 
-	err = query.
+	query = filterTokenAuthenticationPolicy(ctx, query)
+	query = query.
 		Where("\"token\".\"consumed_at\" IS NULL").
-		Where("\"authorization\".\"redirect_uri\" = ?", tr.RedirectURI).
-		Scan(ctx, &authorizationCode)
+		Where("\"authorization\".\"redirect_uri\" = ?", tr.RedirectURI)
+	err = scanIssuanceToken(ctx, db, query, &authorizationCode)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -192,6 +275,11 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 		return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_GRANT, Description: &msg}
 	}
 
+	if !AuthenticationMethodsSatisfied(ctx, auth.AMR) {
+		msg := "Authorization does not satisfy the authentication policy."
+		return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_GRANT, Description: &msg}
+	}
+
 	consumedAt := time.Now().UTC()
 	authorizationCode = models.Token{
 		ID: authorizationCode.ID,
@@ -203,6 +291,7 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 		WherePK().
 		Where("consumed_at IS NULL").
 		Where("is_active = TRUE").
+		Set("last_used_at = ?", consumedAt).
 		Set("consumed_at = ?", consumedAt).
 		Set("revoked_at = ?", consumedAt).
 		Set("revocation_reason = ?", "consumed during token exchange").
@@ -269,6 +358,13 @@ func (tr *tokenRequest) exchangeToken(ctx context.Context, db bun.IDB) (map[util
 }
 
 func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.TokenType]*models.Token, errors.OIDCError) {
+	return runOIDCIssuance(ctx, db, tr.rotateTokenInTx)
+}
+
+func (tr *tokenRequest) rotateTokenInTx(ctx context.Context, db bun.IDB) (map[utils.TokenType]*models.Token, errors.OIDCError) {
+	if tr.policy != nil {
+		ctx = context.WithValue(ctx, authenticationPolicyKey{}, *tr.policy)
+	}
 	if err := tr.Validate(); err != nil {
 		log.Printf("Validation error: %v", err)
 		msg := "Request contained invalid parameters."
@@ -301,8 +397,8 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 			Where("\"authorization__client\".\"client_secret\" = ?", utils.HashedString(*tr.ClientSecret))
 	}
 
-	err := query.
-		Scan(ctx, &currentToken)
+	query = filterTokenAuthenticationPolicy(ctx, query)
+	err := scanIssuanceToken(ctx, db, query, &currentToken)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -347,6 +443,10 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 			Headers:     map[string]string{"WWW-Authenticate": `Basic realm="token", charset="UTF-8"`},
 		}
 	}
+	if !AuthenticationMethodsSatisfied(ctx, auth.AMR) {
+		msg := "Authorization does not satisfy the authentication policy."
+		return nil, errors.JSONError{StatusCode: http.StatusBadRequest, ErrorCode: errors.INVALID_GRANT, Description: &msg}
+	}
 	if tr.Scope != nil {
 		for _, requestedScope := range *tr.Scope {
 			if !utils.ContainsValue(auth.Scope, requestedScope) {
@@ -355,6 +455,12 @@ func (tr *tokenRequest) rotateToken(ctx context.Context, db bun.IDB) (map[utils.
 			}
 		}
 		auth.Scope = *tr.Scope
+	}
+
+	if _, err := db.NewUpdate().Model((*models.Token)(nil)).
+		Set("last_used_at = ?", time.Now().UTC()).Where("token_id = ?", currentToken.ID).Exec(ctx); err != nil {
+		msg := "Failed to record token usage."
+		return nil, errors.JSONError{StatusCode: http.StatusInternalServerError, ErrorCode: errors.SERVER_ERROR, Description: &msg}
 	}
 
 	auth.ReplacedID = auth.ID
@@ -454,6 +560,9 @@ func ParseTokenRequest(r *http.Request) (*tokenRequest, errors.OIDCError) {
 	}
 
 	var tr tokenRequest
+	if policy, ok := r.Context().Value(authenticationPolicyKey{}).(authenticationPolicy); ok {
+		tr.policy = &policy
+	}
 	decoder := utils.NewCustomDecoder()
 
 	msg := "Invalid token request parameters."

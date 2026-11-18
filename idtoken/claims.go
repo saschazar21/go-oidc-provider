@@ -26,6 +26,7 @@ type Claims struct {
 	Scope           utils.ScopeSlice `json:"scope,omitempty" validate:"omitempty,dive,scope"`
 	Nonce           string           `json:"nonce,omitempty"`
 	AuthTime        *jwt.NumericDate `json:"auth_time,omitempty"`
+	AMR             []utils.AMR      `json:"amr,omitempty"`
 	AccessTokenHash string           `json:"at_hash,omitempty"`
 	CodeHash        string           `json:"c_hash,omitempty"`
 	StateHash       string           `json:"s_hash,omitempty"`
@@ -173,6 +174,9 @@ func NewClaimsFromAuthorization(auth *models.Authorization) (*Claims, error) {
 	}
 	if auth.AuthTime != nil && !auth.AuthTime.IsZero() {
 		claims.AuthTime = jwt.NewNumericDate(*auth.AuthTime)
+	}
+	if auth.AMR != nil {
+		claims.AMR = append([]utils.AMR(nil), (*auth.AMR)...)
 	}
 
 	if auth.State != nil && *auth.State != "" {

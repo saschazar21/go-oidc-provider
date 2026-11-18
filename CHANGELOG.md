@@ -1,3 +1,18 @@
+## [0.2.0] - Unreleased
+
+### Features
+
+- Add immutable per-provider `EmailCodeStrategy()` and `PasswordStrategy()` login configuration; compose password followed by email with `RequireEmail: true`. Inject email delivery and a mandatory deployment-wide limiter; support trusted custom strategies.
+- Add configured browser login/code handlers and policy-protected authorization, consent decision, and token handlers. Propagate authenticated AMR and authentication time; reject missing/insufficient evidence on configured session reuse, code exchange, and refresh. No OAuth password grant is added.
+- Add separate Argon2id password credentials (19 MiB, two passes, parallelism one), bounded verification costs, and byte-exact passwords up to 1024 bytes. Add library provisioning and hidden-input user CLI create/set/replace/remove operations; no public password reset or enrollment endpoint.
+
+### Security and operations
+
+- Bind pending email challenges to a browser attempt and policy; enforce ten-minute attempts, five-minute codes, five failed verifications per attempt, and a thirty-second resend cooldown. Password changes invalidate attempts and revoke user sessions and grants.
+- Harden legacy email-token completion against unsuccessful outcomes, replay, and transaction/cookie ordering failures. Existing exports remain email-only; never mix legacy login/magic routes with stronger configured flows.
+- **Apply [.migrations/0.2.0.sql](.migrations/0.2.0.sql) before deploying code.** Existing users stay passwordless; old grants with unknown AMR fail configured policies. Fresh installations use [schema.sql](schema.sql). Login-attempt retention requires operator-scheduled cleanup; no automatic cleanup trigger is installed for that table.
+- Document sender/limiter/key injection, shared reference-handler database/store requirements, and custom-handler policy context in [docs/login.md](docs/login.md). The demo remains unchanged.
+
 ## [0.1.14] - 2026-11-16
 
 ### 🐛 Bug Fixes

@@ -29,10 +29,17 @@ func (ad *authorizationDecision) Sanitize() {
 }
 
 func (ad *authorizationDecision) updateAuthorization(ctx context.Context, db bun.IDB) errors.OIDCError {
+	if ad.Action != nil && *ad.Action == utils.APPROVED && !AuthenticationMethodsSatisfied(ctx, ad.session.AMR) {
+		msg := "The current session does not satisfy the authentication policy."
+		return errors.OIDCErrorResponse{ErrorCode: errors.LOGIN_REQUIRED, ErrorDescription: &msg, RedirectURI: ad.auth.RedirectURI, State: ad.auth.State}
+	}
 	ad.auth.IsActive = ad.Action != nil && *ad.Action == utils.APPROVED
 	ad.auth.Status = ad.Action
 	ad.auth.UserID = ad.session.UserID
 	ad.auth.User = ad.session.User
+	authTime := ad.session.AuthTime
+	ad.auth.AuthTime = &authTime
+	ad.auth.AMR = copyAuthenticationMethods(ad.session.AMR)
 
 	if ad.auth.IsActive {
 		now := time.Now().UTC()
@@ -109,7 +116,7 @@ func (ad *authorizationDecision) parseSessionCookie(ctx context.Context, db bun.
 		}
 	}
 
-	session, oidcErr := models.GetSessionByID(ctx, db, sessionId)
+	session, oidcErr := lockedIssuanceSession(ctx, db, sessionId)
 	if oidcErr != nil {
 		msg := "Failed to find session in database"
 		log.Printf("%s: %v", msg, oidcErr)
@@ -121,6 +128,10 @@ func (ad *authorizationDecision) parseSessionCookie(ctx context.Context, db bun.
 	}
 
 	ad.session = session
+	if session.User == nil || !AuthenticationMethodsSatisfied(ctx, session.AMR) {
+		msg := "The current session does not satisfy the authentication policy."
+		return errors.HTTPErrorResponse{StatusCode: http.StatusForbidden, Message: errors.FORBIDDEN, Description: msg}
+	}
 	return nil
 }
 
@@ -151,10 +162,13 @@ func HandleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Reques
 		return nil, err
 	}
 
-	return handleAuthorizationDecision(ctx, db, r)
+	return runOIDCIssuance(ctx, db, func(ctx context.Context, tx bun.IDB) (utils.Writable, errors.OIDCError) {
+		return handleAuthorizationDecision(ctx, tx, r)
+	})
 }
 
 func handleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Request) (utils.Writable, errors.OIDCError) {
+	ctx = authenticationPolicyContext(ctx, r)
 	var decision authorizationDecision
 
 	if err := decision.parseSessionCookie(ctx, db, r); err != nil {
@@ -199,6 +213,10 @@ func handleAuthorizationDecision(ctx context.Context, db bun.IDB, r *http.Reques
 
 	if err := decision.parseAuthorizationCookie(ctx, db, r); err != nil {
 		return nil, err
+	}
+	if after := authorizationReauthenticationTime(r, decision.auth.ID); after != nil && !decision.session.AuthTime.After(*after) {
+		msg := "Fresh authentication is required for this authorization."
+		return nil, errors.OIDCErrorResponse{ErrorCode: errors.LOGIN_REQUIRED, ErrorDescription: &msg, RedirectURI: decision.auth.RedirectURI, State: decision.auth.State}
 	}
 
 	// Process the authorization decision (approve/deny)

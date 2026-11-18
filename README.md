@@ -28,6 +28,7 @@
 - Configurable **Authorization Flows** with support for **PKCE** for secure client-side usage
 - Signed **ID tokens** (JWT), **access tokens** and **refresh tokens** with fully customizable claims
 - Standard OIDC endpoints: discovery, authorization, token, userinfo
+- Per-provider email-code, password-only, or password-then-email login, with injectable delivery and a required deployment-wide limiter
 - Fully customizable, extensible, and easy to integrate into existing Go applications
 
 ## Prerequisites
@@ -40,7 +41,7 @@
 - [`github.com/saschazar21/go-oidc-provider/cli`](cli): Command-line interface (CLI) helpers
   - `client`: Create OIDC clients using a guided CLI wizard
   - `magic-link-whitelist`: Add an e-mail address to the magic link whitelist for enabling new user registration, or
-  - `user`: Manually create new user using a guided CLI wizard
+  - `user`: Create users and optionally provision, replace, or remove passwords using hidden terminal input
 - [`github.com/saschazar21/go-oidc-provider/db`](db): Database client and connection management
 - [`github.com/saschazar21/go-oidc-provider/endpoints`](endpoints): Generic implementations of standard OIDC endpoints, not for production use
 - [`github.com/saschazar21/go-oidc-provider/errors`](errors): Custom error types for OIDC and HTTP status codes
@@ -63,10 +64,18 @@ The [`helpers`](helpers) and [`endpoints`](endpoints) packages provide reference
 | `/token`                            | Token endpoint (exchange code for tokens)      |
 | `/userinfo`                         | User info endpoint                             |
 | `/login`                            | Login endpoint                                 |
-| `/login/magic`                      | Magic link login endpoint (passwordless login) |
+| `/login/magic`                      | Email-code verification/resend (configured flows) |
 | `/logout`                           | Logout endpoint                                |
 
 > ⚠️ The HTTP handlers in the `endpoints` package are reference implementations meant to demonstrate how to use the library. They are not production-ready and should be customized and secured according to your application's needs. This first and foremost applies to the handling of **Magic Link Tokens**, which require a separate implementation to be securely transmitted to the end user.
+
+### Login configuration and upgrade
+
+See [docs/login.md](docs/login.md) for all three mode configurations, sender/limiter injection, handler wiring, password administration, and deployment requirements. `helpers.NewLoginService` fixes policy per provider instance; `PasswordStrategy()` with `RequireEmail: true` requires password verification followed by an email code. This is browser login, not an OAuth password grant or a claim of phishing-resistant authentication.
+
+**Upgrade schema before deploying v0.2.0 code:** apply [.migrations/0.2.0.sql](.migrations/0.2.0.sql) to an existing database; use [schema.sql](schema.sql) for a fresh database. Existing users remain passwordless. Configured OIDC handlers reject sessions and grants whose authentication-method evidence is missing or insufficient, including old grants with unknown AMR. Password changes revoke user sessions and grants.
+
+Legacy exported login/magic helpers and handlers remain email-only. **Never mount legacy login/magic handlers alongside a stronger configured flow.** Use the configured login, code, authorization, decision, and token handlers together; the reference OIDC handlers must use the same database and cookie-store configuration as the service. Custom handlers must preserve and enforce the configured request policy.
 
 ### Environment Variables
 

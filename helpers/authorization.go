@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"net/url"
@@ -20,7 +21,80 @@ type authorizationRequest struct {
 	w             http.ResponseWriter   `json:"-"`
 	authorization *models.Authorization `json:"-"`
 
-	params url.Values `json:"-"`
+	params              url.Values `json:"-"`
+	reauthenticateAfter *time.Time
+}
+
+const authorizationReauthenticateAfter = "reauthenticate_after"
+
+// Read without Session.AfterSelect: its pooled UPDATE can otherwise take a
+// session lock before the user lock, or deadlock against our own transaction.
+// Both reads are side-effect free; only the second supplies trusted evidence.
+func lockedIssuanceSession(ctx context.Context, db bun.IDB, id string) (*models.Session, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, err
+	}
+	load := func(locked bool) (*models.Session, error) {
+		var session models.Session
+		query := db.NewSelect().Model(&session).Relation("User").Relation("Client").
+			Where(`"session"."session_id" = ?`, uid).
+			Where(`"session"."is_active" = TRUE`).
+			Where(`"session"."expires_at" > clock_timestamp()`).
+			Where(`"user"."is_active" = TRUE`).Where(`"user"."is_locked" = FALSE`)
+		if locked {
+			query = query.For(`UPDATE OF "session"`)
+		}
+		err := db.NewRaw(query.String()).Scan(ctx, &session)
+		return &session, err
+	}
+	session, err := load(false)
+	if err != nil {
+		return nil, err
+	}
+	userID := session.UserID
+	if err := lockIssuanceUser(ctx, db, userID); err != nil {
+		return nil, err
+	}
+	session, err = load(true)
+	if err != nil {
+		return nil, err
+	}
+	if session.UserID != userID || session.User == nil {
+		return nil, sql.ErrNoRows
+	}
+	// Preserve sliding-session usage tracking, but on this transaction rather
+	// than the pool used by the model hook.
+	now := time.Now().UTC()
+	_, err = db.NewUpdate().Model((*models.Session)(nil)).
+		Set("last_accessed_at = ?", now).Set("expires_at = ?", now.Add(24*time.Hour)).
+		Where("session_id = ?", session.ID).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+// The signed continuation cookie binds freshness to this authorization, rather
+// than replaying prompt=login/max_age=0 forever after successful authentication.
+func authorizationReauthenticationTime(r *http.Request, id uuid.UUID) *time.Time {
+	cookie, err := parseCookieFromRequest(r, AUTHORIZATION_COOKIE_NAME)
+	if err != nil || cookie.Values[AUTHORIZATION_COOKIE_ID] != id.String() {
+		return nil
+	}
+	if micros, ok := cookie.Values[authorizationReauthenticateAfter].(int64); ok {
+		at := time.UnixMicro(micros).UTC()
+		return &at
+	}
+	return nil
+}
+
+func (ar *authorizationRequest) requireLogin(ctx context.Context) errors.OIDCError {
+	if _, configured := ctx.Value(authenticationPolicyKey{}).(authenticationPolicy); configured && ar.reauthenticateAfter == nil {
+		now := time.Now().UTC().Truncate(time.Microsecond)
+		ar.reauthenticateAfter = &now
+	}
+	return errors.InternalRedirectError{StatusCode: ar.getCorrectRedirectStatusCode(), Location: LOGIN_ENDPOINT}
 }
 
 func (ar *authorizationRequest) getCorrectRedirectStatusCode() int {
@@ -35,15 +109,26 @@ func (ar *authorizationRequest) getCorrectRedirectStatusCode() int {
 }
 
 func (ar *authorizationRequest) parseSession(ctx context.Context, db bun.IDB) errors.OIDCError {
-	session, err := ParseSession(ctx, db, ar.w, ar.r)
+	ctx = authenticationPolicyContext(ctx, ar.r)
+	id, cookieErr := getSessionIdFromCookie(ar.w, ar.r)
+	if cookieErr != nil {
+		return cookieErr
+	}
+	session, err := lockedIssuanceSession(ctx, db, id)
 	if err != nil {
 		log.Printf("Error parsing session: %v", err)
-		return err
+		deleteCookie(ar.w, SESSION_COOKIE_NAME)
+		return ar.requireLogin(ctx)
+	}
+	if session.User == nil || !AuthenticationMethodsSatisfied(ctx, session.AMR) ||
+		(ar.reauthenticateAfter != nil && !session.AuthTime.After(*ar.reauthenticateAfter)) {
+		return ar.requireLogin(ctx)
 	}
 
 	ar.authorization.User = session.User // do not set UserID yet, will be set in HandleAuthorizationRequest
 	authTime := session.AuthTime
 	ar.authorization.AuthTime = &authTime
+	ar.authorization.AMR = copyAuthenticationMethods(session.AMR)
 
 	return nil
 }
@@ -121,13 +206,19 @@ func (ar *authorizationRequest) AuthenticateClient(ctx context.Context, db bun.I
 }
 
 func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, db bun.IDB) errors.OIDCError {
+	ctx = authenticationPolicyContext(ctx, ar.r)
+	// Cookie-backed authorizations may already be approved. Never retain their
+	// identity or approval when current-session validation requires a login.
+	ar.authorization.User = nil
+	ar.authorization.UserID = uuid.Nil
+	ar.authorization.AuthTime = nil
+	ar.authorization.AMR = nil
+	ar.authorization.IsActive = false
+	ar.authorization.Status = nil
 	if (ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.LOGIN) ||
 		(ar.authorization.MaxAge != nil && *ar.authorization.MaxAge == 0) {
 		log.Printf("Prompt is set to 'login', redirecting to login page")
-		return errors.InternalRedirectError{
-			StatusCode: ar.getCorrectRedirectStatusCode(),
-			Location:   LOGIN_ENDPOINT,
-		}
+		return ar.requireLogin(ctx)
 	}
 
 	err := ar.parseSession(ctx, db)
@@ -139,6 +230,8 @@ func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, 
 			ErrorCode:        errors.LOGIN_REQUIRED,
 			ErrorDescription: &msg,
 			RedirectURI:      ar.authorization.RedirectURI,
+			State:            ar.authorization.State,
+			IsFragment:       ar.authorization.ResponseType != utils.CODE,
 		}
 	}
 
@@ -149,9 +242,9 @@ func (ar *authorizationRequest) HandleAuthorizationRequest(ctx context.Context, 
 		if ar.authorization.AuthTime == nil || time.Since(*ar.authorization.AuthTime).Seconds() > float64(*ar.authorization.MaxAge) {
 			if ar.authorization.Prompt != nil && *ar.authorization.Prompt == utils.NONE {
 				msg := "Prompt is set to 'none', but the authentication is too old."
-				return errors.OIDCErrorResponse{ErrorCode: errors.LOGIN_REQUIRED, ErrorDescription: &msg, RedirectURI: ar.authorization.RedirectURI}
+				return errors.OIDCErrorResponse{ErrorCode: errors.LOGIN_REQUIRED, ErrorDescription: &msg, RedirectURI: ar.authorization.RedirectURI, State: ar.authorization.State, IsFragment: ar.authorization.ResponseType != utils.CODE}
 			}
-			return errors.InternalRedirectError{StatusCode: ar.getCorrectRedirectStatusCode(), Location: LOGIN_ENDPOINT}
+			return ar.requireLogin(ctx)
 		}
 	}
 
@@ -360,12 +453,32 @@ func parseAuthorizationRequest(w http.ResponseWriter, r *http.Request) (*authori
 }
 
 func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (_ utils.Writable, _ *models.Authorization, err errors.OIDCError) {
+	type result struct {
+		response utils.Writable
+		auth     *models.Authorization
+	}
+	value, oidcErr := runOIDCIssuance(ctx, db, func(ctx context.Context, tx bun.IDB) (result, errors.OIDCError) {
+		response, auth, err := handleAuthorizationRequest(ctx, tx, w, r)
+		return result{response, auth}, err
+	})
+	return value.response, value.auth, oidcErr
+}
+
+func handleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseWriter, r *http.Request) (_ utils.Writable, _ *models.Authorization, err errors.OIDCError) {
+	if r != nil {
+		ctx = authenticationPolicyContext(ctx, r)
+	}
 	ar, err := ParseAuthorizationRequest(ctx, db, w, r)
 	if err != nil {
 		return
 	}
 
 	err = ar.HandleAuthorizationRequest(ctx, db)
+	if err != nil {
+		if _, redirect := err.(errors.InternalRedirectError); !redirect {
+			return nil, nil, err
+		}
+	}
 
 	auth := ar.authorization
 
@@ -392,7 +505,7 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 		return nil, nil, err
 	}
 
-	if auth.IsApproved() { // create authorization response if authorization can be completed without user interaction
+	if err == nil && auth.IsApproved() { // only validated current sessions may reuse approval
 		log.Printf("Authorization approved for client %s and user %s", auth.ClientID, auth.UserID)
 
 		arResponse, oidcErr := NewAuthorizationResponse(ctx, db, auth)
@@ -406,6 +519,10 @@ func HandleAuthorizationRequest(ctx context.Context, db bun.IDB, w http.Response
 
 	cookieStore, _ := utils.NewCookieStore().Get(r, AUTHORIZATION_COOKIE_NAME)
 	cookieStore.Values[AUTHORIZATION_COOKIE_ID] = auth.ID.String()
+	delete(cookieStore.Values, authorizationReauthenticateAfter)
+	if ar.reauthenticateAfter != nil {
+		cookieStore.Values[authorizationReauthenticateAfter] = ar.reauthenticateAfter.UnixMicro()
+	}
 	cookieStore.Options = &sessions.Options{
 		HttpOnly: true,
 		MaxAge:   int(auth.ExpiresAt.ExpiresAt.Sub(time.Now().UTC()).Seconds()),
@@ -479,6 +596,7 @@ func ParseAuthorizationRequest(ctx context.Context, db bun.IDB, w http.ResponseW
 		}
 
 		ar.authorization = auth
+		ar.reauthenticateAfter = authorizationReauthenticationTime(r, auth.ID)
 	}
 
 	return ar, nil

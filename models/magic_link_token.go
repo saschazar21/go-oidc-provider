@@ -44,12 +44,9 @@ func (m *MagicLinkToken) determineResult(ctx context.Context, db bun.IDB) (*util
 	err := db.NewSelect().
 		Model(m).
 		WherePK().
-		Relation("User", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.
-				Where("\"user\".\"is_active\" = ?", true).
-				Where("\"user\".\"is_locked\" = ?", false)
-		}).
+		Relation("User").
 		Column("is_active", "result", "consumed_at", "expires_at").
+		For("UPDATE OF magic_link_token").
 		Scan(ctx)
 
 	if err != nil {
@@ -61,8 +58,8 @@ func (m *MagicLinkToken) determineResult(ctx context.Context, db bun.IDB) (*util
 		}
 	}
 
-	if m.Result != nil {
-		if *m.Result == utils.SUCCESS {
+	if m.Result != nil || m.IsActive == nil || !*m.IsActive {
+		if m.Result != nil && *m.Result == utils.SUCCESS {
 			log.Printf("Magic Link token %s has already been consumed successfully.", m.ID.String())
 			return nil, errors.JSONAPIError{
 				StatusCode: http.StatusBadRequest,
@@ -80,6 +77,11 @@ func (m *MagicLinkToken) determineResult(ctx context.Context, db bun.IDB) (*util
 
 	if m.ExpiresAt.ExpiresAt.Before(time.Now().UTC()) {
 		result := utils.EXPIRED
+		return &result, nil
+	}
+
+	if m.User == nil || m.User.Email == nil || m.User.IsActive == nil || !*m.User.IsActive || m.User.IsLocked == nil || *m.User.IsLocked {
+		result := utils.FAILED
 		return &result, nil
 	}
 
@@ -244,6 +246,34 @@ func (m *MagicLinkToken) BeforeAppendModel(ctx context.Context, query bun.Query)
 }
 
 func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, id string, token string, meta ...string) (*MagicLinkToken, errors.HTTPError) {
+	// Retain the caller's row lock until its session insert and outer commit.
+	// DB and Conn callers need their own transaction; Tx callers already have one.
+	switch db.(type) {
+	case bun.Tx, *bun.Tx:
+		return consumeMagicLinkToken(ctx, db, id, token, meta...)
+	}
+
+	var consumed *MagicLinkToken
+	err := db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var consumeErr errors.HTTPError
+		consumed, consumeErr = consumeMagicLinkToken(ctx, tx, id, token, meta...)
+		return consumeErr
+	})
+	if err != nil {
+		if httpErr, ok := err.(errors.HTTPError); ok {
+			return nil, httpErr
+		}
+		log.Printf("Failed to commit Magic Link token consumption: %v", err)
+		return nil, errors.JSONAPIError{
+			StatusCode: http.StatusInternalServerError,
+			Title:      "Internal Server Error",
+			Detail:     "Failed to consume Magic Link token.",
+		}
+	}
+	return consumed, nil
+}
+
+func consumeMagicLinkToken(ctx context.Context, db bun.IDB, id string, token string, meta ...string) (*MagicLinkToken, errors.HTTPError) {
 	if id == "" || id == uuid.Nil.String() {
 		return nil, errors.JSONAPIError{
 			StatusCode: http.StatusBadRequest,
@@ -276,20 +306,17 @@ func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, id string, token str
 		Token: &hashedToken,
 	}
 
-	result, err := m.determineResult(ctx, db)
-	if err != nil {
-		httpErr, _ := err.(errors.JSONAPIError)
+	result, httpErr := m.determineResult(ctx, db)
+	if httpErr != nil {
 		return nil, httpErr
 	}
 
 	consumedAt := time.Now().UTC()
 	isActive := false
 	user := m.User
-	email := utils.HashedString(*user.Email) // Store email hash
 
 	m = MagicLinkToken{
 		ID:       uid,
-		Email:    &email,
 		IsActive: &isActive,
 		Result:   result,
 	}
@@ -309,10 +336,23 @@ func ConsumeMagicLinkToken(ctx context.Context, db bun.IDB, id string, token str
 		m.UserAgent = &userAgent
 	}
 
-	err = m.save(ctx, db)
-	if err != nil {
-		httpErr, _ := err.(errors.JSONAPIError)
-		return nil, httpErr
+	// Do not use save: consumption must persist terminal failures even when
+	// the associated user has become inactive, locked, or unavailable.
+	_, updateErr := db.NewUpdate().Model(&m).
+		Set("is_active = ?", m.IsActive).
+		Set("result = ?", m.Result).
+		Set("consumed_at = ?", m.ConsumedAt).
+		Set("updated_at = ?", consumedAt).
+		Set("ip_address = COALESCE(?, ip_address)", m.IPAddress).
+		Set("user_agent = COALESCE(?, user_agent)", m.UserAgent).
+		WherePK().Exec(ctx)
+	if updateErr != nil {
+		log.Printf("Failed to update consumed Magic Link token: %v", updateErr)
+		return nil, errors.JSONAPIError{
+			StatusCode: http.StatusInternalServerError,
+			Title:      "Internal Server Error",
+			Detail:     "Failed to consume Magic Link token.",
+		}
 	}
 
 	return &m, nil
