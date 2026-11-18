@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "routes": [
+    { "src": "^/authorize$", "dest": "/authorization" },
+    { "src": "^/authorize/decision$", "dest": "/authorization_decision" },
+    { "src": "^/callback$", "dest": "/callback" },
+    { "src": "^/logout$", "dest": "/end_session" },
+    { "src": "^/\\.well-known/jwks\\.json$", "dest": "/jwks" },
+    { "src": "^/login$", "dest": "/login" },
+    { "src": "^/login/magic$", "dest": "/magic_link_token" },
+    {
+      "src": "^/\\.well-known/openid-configuration$",
+      "dest": "/openid_configuration"
+    },
+    { "src": "^/token$", "dest": "/token" },
+    { "src": "^/introspect$", "dest": "/token_introspection" },
+    { "src": "^/userinfo$", "dest": "/userinfo" },
+    { "src": "^/$", "dest": "/index" },
+    { "handle": "filesystem" }
+  ]
+}

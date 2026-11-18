@@ -113,6 +113,67 @@ A demo application showcasing the usage of the library can be found in the [`dem
 
 A deployed version of the demo can be accessed at [https://go-oidc-demo.netlify.app](https://go-oidc-demo.netlify.app).
 
+### Deploy the demo to Vercel
+
+The demo supports both Netlify and Vercel. From the repository root, `make -C demo`
+retains the Netlify build; `make -C demo vercel` cross-compiles all Go functions
+for Vercel (Linux/amd64, CGO disabled). The `vercel` build tag selects Vercel's Go
+bridge instead of Netlify's API Gateway adapter without changing the HTTP handlers.
+The build requires the full checkout because the demo module imports the parent
+provider module through a local replacement.
+
+`make -C demo vercel` generates Build Output API v3 artifacts below the demo's
+Vercel output directory: one function bundle per command, runtime descriptors,
+route configuration, and static assets. Routing is maintained in
+[demo/vercel/config.json](demo/vercel/config.json) and tested against
+[demo/\_redirects](demo/_redirects). Run `make -C demo vercel-check` after compiling
+to validate all bundles, metadata, routes, and executable formats.
+
+To deploy manually, run `pnpm install --frozen-lockfile` inside the demo directory,
+link the Vercel project with `pnpm exec vercel pull --yes --environment=production`,
+then run `make vercel`, `make vercel-check`, and `pnpm deploy:vercel`. Run the
+deployment from the demo directory, **not the functions subtree**: Vercel must
+upload the complete prebuilt output, including routing and static assets. No
+remote Go compilation is needed. A project created in the Vercel dashboard should
+use the demo directory as its Root Directory and the Other framework preset.
+
+The [deployment workflow](.github/workflows/deploy.yml) deploys both platforms on
+pushes to `main`, after CI passes. For Vercel, create a GitHub Environment named
+`vercel-production` and configure these environment or repository settings:
+
+| Setting             | Kind     | Purpose                                       |
+| ------------------- | -------- | --------------------------------------------- |
+| `VERCEL_TOKEN`      | Secret   | Vercel token authorized to deploy the project |
+| `VERCEL_ORG_ID`     | Variable | Vercel account/team identifier                |
+| `VERCEL_PROJECT_ID` | Variable | Existing Vercel project identifier            |
+
+The Vercel CLI displays the project and organization identifiers when linking the
+project. Configure any required GitHub Environment approvals before deploying.
+The workflow pulls production settings, compiles and validates the demo, then
+deploys with `--prebuilt --prod`; its deployment URL is recorded separately from
+Netlify's environment.
+
+Configure the **production runtime environment in Vercel Project Settings** using
+[demo/.env.sample](demo/.env.sample). In particular:
+
+- Set an explicit, stable HTTPS `ISSUER_URL`, without a trailing slash. The
+  automatic URL fallback supports Netlify, not Vercel.
+- Provision a reachable PostgreSQL database with the current schema, an OIDC
+  client with matching `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, and the exact
+  `ISSUER_URL` plus `/callback` redirect URI (and any logout redirect URIs).
+- Configure `DB_URL`, `MASTER_KEY`, `COOKIE_AUTH_KEY`, at least one supported
+  asymmetric signing key, and optionally `COOKIE_ENC_KEY`. Keep these values
+  consistent across all functions and deployments; never put secrets in generated
+  function descriptors. Enable `DEMO_MODE=true` for the demo behavior.
+- Ensure deployment protection permits the demo's server-to-server discovery and
+  token requests. Verify discovery, JWKS, login, callback/token exchange,
+  userinfo/introspection, and logout after deployment.
+
+Each Vercel build replaces only generated output, removing obsolete function
+bundles. `make -C demo clean-vercel` removes that output while preserving linked
+project settings and downloaded environment files; `make -C demo clean` also
+removes the Netlify build outputs. Generated Vercel state is ignored by Git.
+
 ## References
 
 - [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)

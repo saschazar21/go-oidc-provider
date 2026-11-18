@@ -101,3 +101,78 @@ jobs:
           echo "deploy_id=$(jq -re '.deploy_id' netlify.json)" >> $GITHUB_OUTPUT
           echo "deploy_url=$(jq -re '.deploy_url' netlify.json)" >> $GITHUB_OUTPUT
         working-directory: demo
+
+  vercel:
+    name: "Deploy to Vercel"
+    runs-on: ubuntu-latest
+    needs:
+      - outputs
+      - ci
+
+    environment:
+      name: vercel-production
+      url: ${{ steps.deploy.outputs.deploy_url }}
+
+    outputs:
+      deploy_url: ${{ steps.deploy.outputs.deploy_url }}
+
+    defaults:
+      run:
+        working-directory: demo
+
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: demo/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: demo/.tool-versions
+          cache: pnpm
+          cache-dependency-path: demo/pnpm-lock.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: demo/go.mod
+          cache-dependency-path: |
+            go.sum
+            demo/go.sum
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pull Vercel production settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${VERCEL_TOKEN:?Set the VERCEL_TOKEN secret}"
+          : "${VERCEL_ORG_ID:?Set the VERCEL_ORG_ID variable}"
+          : "${VERCEL_PROJECT_ID:?Set the VERCEL_PROJECT_ID variable}"
+          pnpm exec vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Compile Vercel functions
+        run: make vercel
+
+      - name: Validate prebuilt output
+        run: make vercel-check
+
+      - name: Deploy prebuilt demo to Vercel
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          deploy_url=$(pnpm exec vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN")
+          echo "deploy_url=${deploy_url}" >> "$GITHUB_OUTPUT"

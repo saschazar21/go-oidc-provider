@@ -22,6 +22,7 @@ func renderCallbackTemplate(w http.ResponseWriter, data interface{}) {
 	var tpl *template.Template
 	var err error
 
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	switch data.(type) {
 	case oidc.OIDCErrorResponse:
 		w.WriteHeader(http.StatusBadRequest)

@@ -5,10 +5,11 @@ go 1.24.4
 replace github.com/saschazar21/go-oidc-provider => ../
 
 require (
-	github.com/aws/aws-lambda-go v1.51.1
+	github.com/aws/aws-lambda-go v1.54.0
 	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
 	github.com/saschazar21/go-oidc-provider v0.0.0
 	github.com/stretchr/testify v1.10.0
+	github.com/vercel/go-bridge v0.0.0-20260827232521-cfc76d26d554
 )
 
 require (

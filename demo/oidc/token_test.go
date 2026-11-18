@@ -51,7 +51,7 @@ func TestTokenRequest(t *testing.T) {
 	assert.NotNil(t, tokenRequest, "Failed to create OIDC Token Request")
 	assert.Equal(t, "authorization_code", tokenRequest.GrantType, "Grant Type mismatch")
 	assert.Equal(t, "auth-code-12345", tokenRequest.Code, "Code mismatch")
-	assert.Equal(t, fmt.Sprintf("%s/oidc/callback", server.URL), tokenRequest.RedirectURI, "Redirect URI mismatch")
+	assert.Equal(t, fmt.Sprintf("%s/callback", server.URL), tokenRequest.RedirectURI, "Redirect URI mismatch")
 	assert.Equal(t, "client-id-123", tokenRequest.ClientID, "Client ID mismatch")
 	assert.Equal(t, "client-secret-xyz", tokenRequest.ClientSecret, "Client Secret mismatch")
 
