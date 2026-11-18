@@ -17,52 +17,62 @@
 
 ### 🐛 Bug Fixes
 
-- *(cli)* Fixed client cli (#19)
+- _(cli)_ Fixed client cli (#19)
+
 ## [0.1.13] - 2026-11-16
 
 ### 🐛 Bug Fixes
 
 - Fixed issues contradicting OIDC specs (#18)
+
 ## [0.1.12] - 2026-11-16
 
 ### 🐛 Bug Fixes
 
-- *(models)* Fix secure client secret lifecycle (#17)
+- _(models)_ Fix secure client secret lifecycle (#17)
+
 ## [0.1.11] - 2026-06-19
 
 ### 🐛 Bug Fixes
 
-- *(helpers)* Fixed magic link & authorization cookie (#16)
+- _(helpers)_ Fixed magic link & authorization cookie (#16)
+
 ## [0.1.10] - 2026-06-19
 
 ### 🐛 Bug Fixes
 
-- *(helpers)* Fixed session, authorization & magic link cookie (#15)
+- _(helpers)_ Fixed session, authorization & magic link cookie (#15)
+
 ## [0.1.9] - 2026-06-18
 
 ### 🐛 Bug Fixes
 
-- *(helpers)* Fixed session issues (#14)
+- _(helpers)_ Fixed session issues (#14)
+
 ## [0.1.8] - 2026-06-17
 
 ### 🐛 Bug Fixes
 
-- *(models)* Fixed Client default values & validation (#13)
+- _(models)_ Fixed Client default values & validation (#13)
+
 ## [0.1.7] - 2026-04-30
 
 ### 🐛 Bug Fixes
 
 - Fixed CORS headers in endpoints (#12)
+
 ## [0.1.6] - 2026-04-30
 
 ### 🐛 Bug Fixes
 
 - Fixed none check in openid-configuration (#11)
+
 ## [0.1.5] - 2026-04-17
 
 ### 🐛 Bug Fixes
 
 - Removed necessity of providing code_verifier at token rotation (#10)
+
 ## [0.1.4] - 2026-02-12
 
 ### 🐛 Bug Fixes
@@ -72,21 +82,25 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Updated README.md [skip ci]
+
 ## [0.1.3] - 2026-02-10
 
 ### ⚙️ Miscellaneous Tasks
 
 - Improve the matrix compile job for CLI applications (#8)
+
 ## [0.1.2] - 2026-02-10
 
 ### ⚙️ Miscellaneous Tasks
 
 - Bump go version from 1.24.3 to 1.24.4 (#7)
+
 ## [0.1.1] - 2026-02-10
 
 ### ⚙️ Miscellaneous Tasks
 
 - Fixed CLI build input path (#6)
+
 ## [0.1.0] - 2026-02-10
 
 ### 🚀 Features

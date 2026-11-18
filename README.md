@@ -54,18 +54,18 @@
 
 The [`helpers`](helpers) and [`endpoints`](endpoints) packages provide reference implementations of standard OIDC process flows and endpoints. Below is a list of included endpoints:
 
-| Endpoint                            | Description                                    |
-| ----------------------------------- | ---------------------------------------------- |
-| `/.well-known/openid-configuration` | OIDC discovery document                        |
-| `/.well-known/jwks.json`            | JSON Web Key Set (JWKS)                        |
-| `/authorize`                        | Authorization endpoint (code flow)             |
-| `/authorize/decision`               | User consent decision endpoint                 |
-| `/introspect`                       | Token introspection endpoint                   |
-| `/token`                            | Token endpoint (exchange code for tokens)      |
-| `/userinfo`                         | User info endpoint                             |
-| `/login`                            | Login endpoint                                 |
+| Endpoint                            | Description                                       |
+| ----------------------------------- | ------------------------------------------------- |
+| `/.well-known/openid-configuration` | OIDC discovery document                           |
+| `/.well-known/jwks.json`            | JSON Web Key Set (JWKS)                           |
+| `/authorize`                        | Authorization endpoint (code flow)                |
+| `/authorize/decision`               | User consent decision endpoint                    |
+| `/introspect`                       | Token introspection endpoint                      |
+| `/token`                            | Token endpoint (exchange code for tokens)         |
+| `/userinfo`                         | User info endpoint                                |
+| `/login`                            | Login endpoint                                    |
 | `/login/magic`                      | Email-code verification/resend (configured flows) |
-| `/logout`                           | Logout endpoint                                |
+| `/logout`                           | Logout endpoint                                   |
 
 > ⚠️ The HTTP handlers in the `endpoints` package are reference implementations meant to demonstrate how to use the library. They are not production-ready and should be customized and secured according to your application's needs. This first and foremost applies to the handling of **Magic Link Tokens**, which require a separate implementation to be securely transmitted to the end user.
 
