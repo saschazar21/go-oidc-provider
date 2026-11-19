@@ -121,8 +121,8 @@ jobs:
         working-directory: demo
 
     env:
-      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_TELEMETRY_DISABLED: "1"
 
     steps:
@@ -158,8 +158,8 @@ jobs:
         run: |
           set -euo pipefail
           : "${VERCEL_TOKEN:?Set the VERCEL_TOKEN secret}"
-          : "${VERCEL_ORG_ID:?Set the VERCEL_ORG_ID variable}"
-          : "${VERCEL_PROJECT_ID:?Set the VERCEL_PROJECT_ID variable}"
+          : "${VERCEL_ORG_ID:?Set the VERCEL_ORG_ID secret}"
+          : "${VERCEL_PROJECT_ID:?Set the VERCEL_PROJECT_ID secret}"
           pnpm exec vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Compile Vercel functions
