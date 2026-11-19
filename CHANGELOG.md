@@ -1,3 +1,8 @@
+## [0.2.2] - 2026-11-19
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix Vercel deploy workflow (#22)
 ## [0.2.1] - 2026-11-19
 
 ### ⚙️ Miscellaneous Tasks
