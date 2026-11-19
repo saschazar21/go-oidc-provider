@@ -1,3 +1,8 @@
+## [0.2.1] - 2026-11-19
+
+### ⚙️ Miscellaneous Tasks
+
+- *(demo)* Add deploy to Vercel (#21)
 ## [0.2.0] - 2026-11-18
 
 ### 🚀 Features
