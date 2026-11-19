@@ -172,3 +172,4 @@ dist
 /.netlify
 
 # End of https://www.toptal.com/developers/gitignore/api/go,node,remix+netlify
+.vercel
