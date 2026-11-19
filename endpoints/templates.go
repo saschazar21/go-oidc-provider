@@ -1,286 +1,192 @@
 package endpoints
 
+// DEFAULT_PAPER_STYLES is shared by the provider and demo templates. System
+// fonts and self-contained CSS avoid third-party requests on sign-in pages.
+const DEFAULT_PAPER_STYLES = `<style>
+  :root {
+    color-scheme: light;
+    --canvas: #f5f4f0;
+    --paper: #fffefa;
+    --ink: #292d29;
+    --muted: #666b63;
+    --line: #dedfd6;
+    --accent: #355d4b;
+    --wash: #edf2eb;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; min-height: 100svh; background: var(--canvas); color: var(--ink); font-size: 16px; line-height: 1.65; }
+  .page { width: min(100% - 40px, 720px); margin: 0 auto; padding: 64px 0 32px; }
+  .page--form { max-width: 480px; }
+  .page--consent { max-width: 560px; }
+  .masthead { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; color: var(--muted); font-size: .8rem; font-weight: 500; letter-spacing: .03em; }
+  .brand-mark { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--accent); font-family: ui-monospace, monospace; font-size: .72rem; }
+  .paper { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 2px 3px #292d2903, 0 12px 32px #292d2906; }
+  .paper-header { padding: 32px 36px 28px; border-bottom: 1px solid var(--line); }
+  .paper-body { padding: 32px 36px 36px; }
+  .eyebrow { margin: 0 0 12px; color: var(--accent); font-size: .72rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+  h1 { margin: 0 0 12px; font-size: clamp(1.65rem, 5vw, 2rem); font-weight: 600; line-height: 1.25; letter-spacing: -.035em; overflow-wrap: anywhere; }
+  h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 600; letter-spacing: -.01em; }
+  p { margin: 0 0 20px; }
+  .intro { margin-bottom: 0; color: var(--muted); font-size: .94rem; }
+  .muted, .note { color: var(--muted); }
+  .note { font-size: .8rem; line-height: 1.65; }
+  .divider { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .divider > :last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:hover { color: #233e32; }
+  label { display: block; margin-bottom: 8px; font-size: .85rem; font-weight: 600; }
+  input:not([type="hidden"]) { display: block; width: 100%; min-height: 50px; border: 1px solid #b8bdb2; border-radius: 5px; background: #fff; padding: 12px 14px; color: var(--ink); font: inherit; line-height: 1.5; box-shadow: inset 0 1px 2px #292d2904; }
+  input::placeholder { color: #7a7f75; opacity: 1; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 3px; border-color: var(--accent); }
+  :where(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .field { margin-bottom: 24px; }
+  .token-input { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important; }
+  .button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 46px; padding: 11px 20px; border: 1px solid var(--accent); border-radius: 5px; background: var(--accent); color: #fffefa; font: inherit; font-size: .88rem; font-weight: 500; line-height: 1.5; text-decoration: none; cursor: pointer; }
+  .button:hover { background: #294b3b; border-color: #294b3b; color: #fff; }
+  .button--secondary { background: transparent; color: var(--ink); border-color: #b8bdb2; }
+  .button--secondary:hover { background: #f0f0ea; border-color: #91998b; color: var(--ink); }
+  .button--full { width: 100%; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+  .actions .button { flex: 1; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
+  code { padding: 2px 6px; border: 1px solid #dce3d6; border-radius: 4px; background: var(--wash); color: #36513d; overflow-wrap: anywhere; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .entity { padding: 2px 6px; border-radius: 3px; background: var(--wash); color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
+  .data-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-bottom: 10px; font-size: .8rem; font-weight: 600; }
+  .data-label span { color: var(--muted); font-size: .72rem; font-weight: 400; }
+  .data-box { margin: 0 0 28px; padding: 20px; border: 1px solid var(--line); border-radius: 5px; background: #f8f9f4; color: #3d5142; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.85; tab-size: 2; }
+  .data-box code { padding: 0; border: 0; background: none; color: inherit; font-size: inherit; }
+  .scope-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line); border-radius: 5px; max-height: 260px; overflow-y: auto; }
+  .scope-list li { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: .88rem; }
+  .scope-list li:last-child { border-bottom: 0; }
+  .credentials { margin: 20px 0 0; }
+  .credentials > div { padding: 14px 0; border-top: 1px solid var(--line); }
+  .credentials dt { margin-bottom: 6px; color: var(--muted); font-size: .76rem; }
+  .credentials dd { margin: 0; overflow-wrap: anywhere; }
+  .status { display: inline-flex; align-items: center; gap: 7px; color: var(--accent); font-size: .76rem; font-weight: 500; margin-bottom: 18px; }
+  .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .status--error { color: #994535; }
+  .footer { margin-top: 24px; text-align: center; color: var(--muted); font-size: .72rem; }
+  .footer a { color: inherit; }
+  @media (max-width: 520px) {
+    .page { width: calc(100% - 28px); padding-top: 28px; }
+    .paper-header, .paper-body { padding: 24px; }
+    .data-box { padding: 14px; font-size: .74rem; }
+    .actions { flex-direction: column; }
+  }
+  @media print {
+    body { background: #fff; }
+    .page { width: 100%; padding: 0; }
+    .paper { box-shadow: none; }
+  }
+</style>`
+
+const paperMasthead = `<div class="masthead"><span class="brand-mark" aria-hidden="true">id</span> go-oidc-provider <span aria-hidden="true">/</span> demo</div>`
+const paperFooter = `<footer class="footer">© {{ .Year }} · <a href="https://sascha.work" target="_blank" rel="noopener noreferrer">Sascha Zarhuber</a></footer>`
+
 const DEFAULT_AUTHORIZATION_TEMPLATE = `<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Authorize {{ .Client.Name }}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-  <style>
-    .consent-container {
-      max-width: 580px;
-    }
-    .scope-list {
-      max-height: 240px;
-      overflow-y: auto;
-      background-color: var(--bs-tertiary-bg);
-      border: 1px solid var(--bs-border-color);
-      border-radius: 0.375rem;
-    }
-    .scope-list .list-group-item {
-      border-left: 0;
-      border-right: 0;
-      border-radius: 0;
-    }
-    .scope-list .list-group-item:first-child {
-      border-top: 0;
-    }
-    .scope-list .list-group-item:last-child {
-      border-bottom: 0;
-    }
-    .btn-approve {
-      min-width: 140px;
-    }
-    .btn-deny {
-      min-width: 140px;
-    }
-  </style>
+` + DEFAULT_PAPER_STYLES + `
 </head>
-<body class="bg-body-tertiary min-vh-100 d-flex flex-column">
-	<!-- Disclaimer: This HTML template was vibe-coded by AI as I did not want to spend too much time on front-end design for this demo project. -->
-  <div class="container consent-container my-auto py-5">
-    <div class="card shadow-sm border-0">
-      <div class="card-header bg-primary text-white text-center fs-4 fw-semibold py-4">
-        Authorization Request
-      </div>
-      
-      <div class="card-body p-4 p-md-5">
-        <div class="text-center mb-4">
-					<svg xmlns="http://www.w3.org/2000/svg"
-							width="64"
-							height="64"
-							class="bi bi-shield-check text-primary"
-							viewBox="0 0 16 16"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1"
-							stroke-linecap="round"
-							stroke-linejoin="round">
-						<!-- Shield outline -->
-						<path d="M8 1
-										L12.5 2.5
-										V6.5
-										C12.5 9 10.7 11.3 8 12.5
-										C5.3 11.3 3.5 9 3.5 6.5
-										V2.5
-										Z"/>
-						<!-- Check mark -->
-						<path d="M6.3 7.8
-										L7.6 9.1
-										L10 6.6"/>
-					</svg>
-        </div>
-
-        <h2 class="card-title text-center mb-4 fw-bold">
-          {{ .Client.Name }} wants to access your account
-        </h2>
-
-        <p class="text-center text-muted mb-5">
-          This will allow <strong>{{ .Client.Name }}</strong> to perform actions on your behalf according to the permissions below.
-        </p>
-
+<body>
+  <main class="page page--consent">
+    ` + paperMasthead + `
+    <article class="paper" aria-labelledby="page-title">
+      <header class="paper-header">
+        <p class="eyebrow">Authorization Request</p>
+        <h1 id="page-title"><span class="entity">{{ .Client.Name }}</span> wants to access your account</h1>
+        <p class="intro">This will allow <strong>{{ .Client.Name }}</strong> to perform actions on your behalf according to the permissions below.</p>
+      </header>
+      <div class="paper-body">
         {{ if gt (len .Scope) 0 }}
-        <h5 class="text-center mb-3 fw-semibold">Requested permissions (scopes):</h5>
-        <div class="scope-list mb-5">
-          <ul class="list-group list-group-flush">
-            {{ range .Scope }}
-            <li class="list-group-item text-center py-2">{{ . }}</li>
-            {{ end }}
-          </ul>
-        </div>
+        <h2>Requested permissions (scopes):</h2>
+        <ul class="scope-list" aria-label="Requested permissions">
+          {{ range .Scope }}<li><code>{{ . }}</code></li>{{ end }}
+        </ul>
         {{ else }}
-        <p class="text-center text-muted mb-5">
-          No specific scopes requested.
-        </p>
+        <p class="note">No specific scopes requested.</p>
         {{ end }}
-
-        <form method="POST" action="{{ .FormPostURI }}" class="d-flex justify-content-center gap-4 flex-wrap">
-          <button type="submit" name="action" value="approved" class="btn btn-success btn-lg btn-approve">
-            Approve
-          </button>
-          <button type="submit" name="action" value="denied" class="btn btn-outline-secondary btn-lg btn-deny">
-            Deny
-          </button>
+        <form method="POST" action="{{ .FormPostURI }}" class="actions">
+          <button type="submit" name="action" value="approved" class="button">Approve</button>
+          <button type="submit" name="action" value="denied" class="button button--secondary">Deny</button>
         </form>
-
-        <div class="mt-5 text-center">
-          <p class="text-muted small">
-            Only approve if you trust this application.<br>
-            You can revoke access later in your account settings.
-          </p>
-        </div>
+        <div class="divider"><p class="note">Only approve if you trust this application.<br>You can revoke access later in your account settings.</p></div>
       </div>
-
-      <div class="card-footer text-center text-muted small py-3">
-        © {{ .Year }} · <a href="https://sascha.work" target="_blank" rel="noopener noreferrer">Sascha Zarhuber</a>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    </article>
+    ` + paperFooter + `
+  </main>
 </body>
 </html>`
 
 const DEFAULT_LOGIN_TEMPLATE = `<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign In</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-  <style>
-    .login-container {
-      max-width: 420px;
-    }
-    .form-signin .form-floating:focus-within {
-      z-index: 2;
-    }
-    .form-signin input[type="email"] {
-      border-radius: 0.375rem;
-      margin-bottom: -1px;
-      border-bottom-right-radius: 0;
-      border-bottom-left-radius: 0;
-    }
-    .btn-login {
-      border-radius: 0.375rem;
-    }
-  </style>
+` + DEFAULT_PAPER_STYLES + `
 </head>
-<body class="bg-body-tertiary min-vh-100 d-flex align-items-center">
-	<!-- Disclaimer: This HTML template was vibe-coded by AI as I did not want to spend too much time on front-end design for this demo project. -->
-  <div class="container login-container mx-auto px-4">
-    <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
-      <div class="card-body p-5 p-md-5 text-center">
-        <div class="mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg"
-							width="64"
-							height="64"
-							fill="currentColor"
-							class="bi bi-person-circle text-primary"
-							viewBox="0 0 16 16">
-						<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-						<path fill-rule="evenodd"
-									d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.594c.007-.243.065-.477.173-.684.28-.57.85-1.01 1.55-1.255C5.104 10.27 6.387 10 8 10c1.613 0 2.896.27 3.745.655.7.245 1.27.685 1.55 1.255.108.207.166.441.173.684A7 7 0 0 0 8 1z"/>
-					</svg>
-        </div>
-
-        <h1 class="h3 fw-bold mb-4">Sign In</h1>
-
-        <p class="text-muted mb-4">
-          Enter <code>test@example.com</code> as e-mail address to proceed with the OIDC demo
-        </p>
-
-        <form method="POST" action="{{ .FormPostURI }}" class="form-signin">
-          <div class="form-floating mb-3">
-            <input type="email" class="form-control" id="email" name="email" placeholder="test@example.com" required autofocus>
+<body>
+  <main class="page page--form">
+    ` + paperMasthead + `
+    <article class="paper" aria-labelledby="page-title">
+      <header class="paper-header">
+        <h1 id="page-title">Sign In</h1>
+      </header>
+      <div class="paper-body">
+        <p class="note" id="email-hint">Enter <code>test@example.com</code> as e-mail address to proceed with the OIDC demo</p>
+        <form method="POST" action="{{ .FormPostURI }}">
+          <div class="field">
             <label for="email">Email address</label>
+            <input type="email" id="email" name="email" placeholder="test@example.com" autocomplete="email" autocapitalize="none" spellcheck="false" aria-describedby="email-hint" required autofocus>
           </div>
-
-          <button class="btn btn-primary btn-lg w-100 btn-login fw-semibold" type="submit">
-            Sign In →
-          </button>
-
-          <div class="mt-4">
-            <p class="text-muted small mb-0">
-              This is a demo login — no password required.<br>
-              A magic link token is automatically created and provided in the next step.
-            </p>
-          </div>
+          <button class="button button--full" type="submit">Sign In <span aria-hidden="true">→</span></button>
         </form>
+        <div class="divider"><p class="note">This is a demo login — no password required.<br>A magic link token is automatically created and provided in the next step.</p></div>
       </div>
-
-      <div class="card-footer bg-transparent text-center text-muted small py-3 border-0">
-        © {{ .Year }} · <a href="https://sascha.work" target="_blank" rel="noopener noreferrer">Sascha Zarhuber</a>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    </article>
+    ` + paperFooter + `
+  </main>
 </body>
 </html>`
 
 const DEFAULT_MAGIC_LINK_TEMPLATE = `<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Verify Magic Link</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-  <style>
-    .verify-container {
-      max-width: 460px;
-    }
-    .token-input {
-      font-family: 'Consolas', 'Monaco', monospace;
-      letter-spacing: 0.15em;
-      font-size: 1.25rem;
-    }
-    .btn-verify {
-      min-width: 160px;
-    }
-  </style>
+` + DEFAULT_PAPER_STYLES + `
 </head>
-<body class="bg-body-tertiary min-vh-100 d-flex align-items-center">
-	<!-- Disclaimer: This HTML template was vibe-coded by AI as I did not want to spend too much time on front-end design for this demo project. -->
-  <div class="container verify-container mx-auto px-4">
-    <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
-      <div class="card-body p-5 text-center">
-        <div class="mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg"
-							width="64"
-							height="64"
-							fill="currentColor"
-							class="bi bi-envelope-check text-primary"
-							viewBox="0 0 16 16">
-						<path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8.5a.5.5 0 0 0 0-1H2a1 1 0 0 1-1-1V4.414l6.646 4.147a.5.5 0 0 0 .708 0L15 4.414V8a.5.5 0 0 0 1 0V4a2 2 0 0 0-2-2H2zm13 1.383L8 7.566 1 3.383V4l7 4.375L15 4v-.617z"/>
-						<path d="M16 11.5a.5.5 0 0 1-.5.5H13v2.5a.5.5 0 0 1-1 0V12h-1.5a.5.5 0 0 1 0-1H12V8.5a.5.5 0 0 1 1 0V11h2.5a.5.5 0 0 1 .5.5z"/>
-					</svg>
-        </div>
-
-        <h1 class="h3 fw-bold mb-3">Verify Your Email</h1>
-
-        <p class="text-muted mb-4">
-          Normally a magic link is sent to your (real) e-mail address—for demo purposes it is auto-filled here.<br>
-          Click it to sign in — or paste the token below if needed.
-        </p>
-
-        <form method="POST" action="{{ .FormPostURI }}" class="mt-4">
-          <div class="mb-4">
-            <input 
-              type="text" 
-              class="form-control form-control-lg token-input text-center" 
-              id="token" 
-              name="token" 
-              value="{{ .Token }}" 
-              placeholder="Paste token here..." 
-              required 
-              autofocus
-              autocomplete="one-time-code"
-            >
+<body>
+  <main class="page page--form">
+    ` + paperMasthead + `
+    <article class="paper" aria-labelledby="page-title">
+      <header class="paper-header">
+        <h1 id="page-title">Verify Your Email</h1>
+      </header>
+      <div class="paper-body">
+        <p class="note" id="token-hint">Normally a magic link is sent to your (real) e-mail address—for demo purposes it is auto-filled here.<br>Click it to sign in — or paste the token below if needed.</p>
+        <form method="POST" action="{{ .FormPostURI }}">
+          <div class="field">
+            <label for="token">Verification token</label>
+            <input type="text" class="token-input" id="token" name="token" value="{{ .Token }}" placeholder="Paste token here..." aria-describedby="token-hint" required autofocus autocomplete="one-time-code" autocapitalize="none" spellcheck="false">
           </div>
-
           <input type="hidden" name="id" value="{{ .ID }}">
-
-          <button type="submit" class="btn btn-primary btn-lg w-100 btn-verify fw-semibold">
-            Verify & Sign In →
-          </button>
-
-          <div class="mt-4">
-            <p class="text-muted small mb-0">
-              The magic link token sending mechanism is not implemented in this demo, nor is there a sample implementation available in the source code repository.<br>
-              <a href="/" class="text-muted text-decoration-underline">Back to home</a> if you need to start over.
-            </p>
-          </div>
+          <button type="submit" class="button button--full">Verify &amp; Sign In <span aria-hidden="true">→</span></button>
         </form>
+        <div class="divider">
+          <p class="note">The magic link token sending mechanism is not implemented in this demo, nor is there a sample implementation available in the source code repository.<br><a href="/">Back to home</a> if you need to start over.</p>
+        </div>
       </div>
-
-      <div class="card-footer bg-transparent text-center text-muted small py-3 border-0">
-        © {{ .Year }} · <a href="https://sascha.work" target="_blank" rel="noopener noreferrer">Sascha Zarhuber</a>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    </article>
+    ` + paperFooter + `
+  </main>
 </body>
 </html>`

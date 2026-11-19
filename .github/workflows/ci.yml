@@ -36,3 +36,42 @@ jobs:
             coverage.html
           retention-days: 5 # short-lived is fine for PR comments
           if-no-files-found: warn
+
+  demo:
+    name: Test demo and deployment artifacts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: demo/go.mod
+          cache-dependency-path: |
+            go.sum
+            demo/go.sum
+
+      - name: Test Netlify adapter and demo
+        run: go test ./...
+
+      - name: Test Vercel adapter and demo
+        run: go test -tags vercel ./...
+
+      - name: Vet both build variants
+        run: |
+          go vet ./...
+          go vet -tags vercel ./...
+
+      - name: Compile Netlify functions
+        run: make -j2 all
+
+      - name: Compile Vercel functions
+        run: make -j2 vercel
+
+      - name: Validate Vercel artifacts
+        run: make vercel-check

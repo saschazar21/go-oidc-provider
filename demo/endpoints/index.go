@@ -48,6 +48,7 @@ func HandleIndex(w http.ResponseWriter, r *http.Request) {
 
 	oidc.StoreStateCookie(w, authReq.State)
 
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	err = tpl.Execute(w, data)
 	if err != nil {
 		log.Printf("failed to execute template: %v", err)

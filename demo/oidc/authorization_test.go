@@ -41,7 +41,7 @@ func TestAuthorization(t *testing.T) {
 	assert.Equal(t, "client-id-123", authorizationRequest.ClientID, "Client ID mismatch")
 	assert.Equal(t, "code", authorizationRequest.ResponseType, "Response Type mismatch")
 	assert.Equal(t, "openid", authorizationRequest.Scope, "Scope mismatch")
-	assert.Equal(t, fmt.Sprintf("%s/oidc/callback", server.URL), authorizationRequest.RedirectURI, "Redirect URI mismatch")
+	assert.Equal(t, fmt.Sprintf("%s/callback", server.URL), authorizationRequest.RedirectURI, "Redirect URI mismatch")
 
 	authorizationRequest.WithClientID("some-other-client-id").WithScope("openid profile email")
 
@@ -55,5 +55,5 @@ func TestAuthorization(t *testing.T) {
 	assert.Contains(t, authorizationURL, "client_id=some-other-client-id", "Authorization URL missing client_id")
 	assert.Contains(t, authorizationURL, "scope=openid+profile+email", "Authorization URL missing scope")
 	assert.Contains(t, authorizationURL, "response_type=code", "Authorization URL missing response_type")
-	assert.Contains(t, authorizationURL, fmt.Sprintf("redirect_uri=%s", url.QueryEscape(fmt.Sprintf("%s/oidc/callback", server.URL))), "Authorization URL missing redirect_uri")
+	assert.Contains(t, authorizationURL, fmt.Sprintf("redirect_uri=%s", url.QueryEscape(fmt.Sprintf("%s/callback", server.URL))), "Authorization URL missing redirect_uri")
 }

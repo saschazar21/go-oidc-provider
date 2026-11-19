@@ -1,5 +1,6 @@
 /functions
 /public
+/.vercel
 
 # Created by https://www.toptal.com/developers/gitignore/api/go,node,remix+netlify
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,node,remix+netlify
@@ -171,3 +172,4 @@ dist
 /.netlify
 
 # End of https://www.toptal.com/developers/gitignore/api/go,node,remix+netlify
+.vercel
